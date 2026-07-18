@@ -7,6 +7,7 @@ import {
 } from "./errors";
 import {
   assertClientSequence,
+  assertLogSequence,
   assertNonEmptyString,
   assertSyncResponse,
 } from "./invariants";
@@ -49,7 +50,16 @@ export type OutboxEntry<Intent, Operation> =
 export interface ReplicaState<State, Intent, Operation> {
   readonly clientId: string;
   readonly nextClientSequence: number;
+
+  /** Highest canonical sequence represented by confirmedState. */
+  readonly confirmedSequence: number;
   readonly confirmedState: State;
+
+  /**
+   * Retained contiguous suffix of the confirmed canonical log. The suffix ends
+   * at confirmedSequence; older entries may be deleted without moving the
+   * confirmed cursor or changing confirmedState.
+   */
   readonly confirmedLog: readonly CommittedOperation<Operation>[];
   readonly outbox: readonly OutboxEntry<Intent, Operation>[];
 }
@@ -112,6 +122,7 @@ export function createReplicaState<State, Intent = never, Operation = never>(
   return {
     clientId: options.clientId,
     nextClientSequence,
+    confirmedSequence: 0,
     confirmedState: options.initialState,
     confirmedLog: [],
     outbox: [],
@@ -128,6 +139,7 @@ export function enqueueOperation<State, Intent, Operation>(
   assertClientSequence("nextClientSequence", state.nextClientSequence + 1);
   assertNonEmptyString("operationId", input.operationId);
   assertNonEmptyString("intentHash", input.intentHash);
+  assertRetainedConfirmedLog(state);
 
   if (
     state.confirmedLog.some((entry) => entry.operationId === input.operationId) ||
@@ -154,6 +166,32 @@ export function enqueueOperation<State, Intent, Operation>(
 }
 
 /**
+ * Delete a retained committed-log prefix through an absolute canonical
+ * sequence. confirmedState and confirmedSequence are unchanged.
+ */
+export function deleteCommittedLogPrefix<State, Intent, Operation>(
+  state: ReplicaState<State, Intent, Operation>,
+  throughSequence: number,
+): ReplicaState<State, Intent, Operation> {
+  assertLogSequence("throughSequence", throughSequence, true);
+  const retainedBaseSequence = assertRetainedConfirmedLog(state);
+
+  if (throughSequence > state.confirmedSequence) {
+    throw new LogGapError(state.confirmedSequence + 1, throughSequence);
+  }
+  if (throughSequence <= retainedBaseSequence) {
+    return state;
+  }
+
+  return {
+    ...state,
+    confirmedLog: state.confirmedLog.slice(
+      throughSequence - retainedBaseSequence,
+    ),
+  };
+}
+
+/**
  * Build an immutable transmission snapshot. No durable state changes merely
  * because a request is considered in flight.
  */
@@ -161,6 +199,7 @@ export function prepareSyncRequest<State, Intent, Operation>(
   state: ReplicaState<State, Intent, Operation>,
   options: PrepareSyncRequestOptions = {},
 ): SyncRequest<Intent> {
+  assertRetainedConfirmedLog(state);
   const maximumProposals =
     options.maximumProposals ??
     DEFAULT_PROTOCOL_LIMITS.maximumProposalsPerRequest;
@@ -172,7 +211,7 @@ export function prepareSyncRequest<State, Intent, Operation>(
   const proposals: ProposedOperation<Intent>[] = [];
   if (maximumProposals === 0) {
     return {
-      baseSequence: state.confirmedLog.length,
+      baseSequence: state.confirmedSequence,
       maximumEntries,
       proposals,
     };
@@ -188,7 +227,7 @@ export function prepareSyncRequest<State, Intent, Operation>(
   }
 
   return {
-    baseSequence: state.confirmedLog.length,
+    baseSequence: state.confirmedSequence,
     maximumEntries,
     proposals,
   };
@@ -200,15 +239,17 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
   interpreter: ReplicaInterpreter<State, Intent, Operation>,
 ): MergeSyncResult<State, Intent, Operation, Rejection> {
   assertSyncResponse(response);
+  const retainedBaseSequence = assertRetainedConfirmedLog(state);
 
-  if (response.requestedBaseSequence > state.confirmedLog.length) {
+  if (response.requestedBaseSequence > state.confirmedSequence) {
     throw new LogGapError(
-      state.confirmedLog.length + 1,
+      state.confirmedSequence + 1,
       response.requestedBaseSequence + 1,
     );
   }
 
   let outbox = [...state.outbox];
+  let confirmedSequence = state.confirmedSequence;
   let confirmedLog = [...state.confirmedLog];
   let confirmedState = state.confirmedState;
   const newlyResolved: ProposalDecision<Operation, Rejection>[] = [];
@@ -259,10 +300,15 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
   }
 
   for (const received of response.entries) {
-    if (received.sequence <= confirmedLog.length) {
-      const existing = confirmedLog[received.sequence - 1];
+    if (received.sequence <= retainedBaseSequence) {
+      continue;
+    }
+
+    if (received.sequence <= confirmedSequence) {
+      const existing =
+        confirmedLog[received.sequence - retainedBaseSequence - 1];
       if (existing === undefined) {
-        throw new LogGapError(confirmedLog.length + 1, received.sequence);
+        throw new LogGapError(confirmedSequence + 1, received.sequence);
       }
       assertSameCommittedPosition(existing, received, interpreter);
       outbox = resolveOutboxFromCommitted(
@@ -274,7 +320,7 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
       continue;
     }
 
-    const expectedSequence = confirmedLog.length + 1;
+    const expectedSequence = confirmedSequence + 1;
     if (received.sequence !== expectedSequence) {
       throw new LogGapError(expectedSequence, received.sequence);
     }
@@ -283,6 +329,7 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
       confirmedState,
       received.operation,
     );
+    confirmedSequence = received.sequence;
     confirmedLog.push(received);
     outbox = resolveOutboxFromCommitted(
       outbox,
@@ -294,13 +341,20 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
 
   // Reconcile accepted receipts persisted before their canonical entries arrived.
   outbox = outbox.filter((entry) => {
-    if (entry.status !== "accepted" || entry.sequence > confirmedLog.length) {
+    if (entry.status !== "accepted" || entry.sequence > confirmedSequence) {
       return true;
     }
+    if (entry.sequence <= retainedBaseSequence) {
+      throw new SyncEngineError(
+        `accepted outbox entry ${JSON.stringify(entry.proposal.operationId)} ` +
+          `refers to compacted canonical sequence ${entry.sequence}`,
+      );
+    }
 
-    const committed = confirmedLog[entry.sequence - 1];
+    const committed =
+      confirmedLog[entry.sequence - retainedBaseSequence - 1];
     if (committed === undefined) {
-      throw new LogGapError(entry.sequence, confirmedLog.length + 1);
+      throw new LogGapError(entry.sequence, confirmedSequence + 1);
     }
     assertProposalMatchesCommitted(entry.proposal, committed);
     if (
@@ -313,6 +367,7 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
 
   const nextState: ReplicaState<State, Intent, Operation> = {
     ...state,
+    confirmedSequence,
     confirmedState,
     confirmedLog,
     outbox,
@@ -320,7 +375,7 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
   return {
     state: nextState,
     newlyResolved,
-    caughtUpToObservedHead: confirmedLog.length >= response.headSequence,
+    caughtUpToObservedHead: confirmedSequence >= response.headSequence,
   };
 }
 
@@ -344,7 +399,36 @@ export function materializeOptimisticState<State, Intent, Operation>(
 export function confirmedSequence<State, Intent, Operation>(
   state: ReplicaState<State, Intent, Operation>,
 ): number {
-  return state.confirmedLog.length;
+  assertRetainedConfirmedLog(state);
+  return state.confirmedSequence;
+}
+
+function assertRetainedConfirmedLog<State, Intent, Operation>(
+  state: ReplicaState<State, Intent, Operation>,
+): number {
+  assertLogSequence("confirmedSequence", state.confirmedSequence, true);
+  const retainedBaseSequence =
+    state.confirmedSequence - state.confirmedLog.length;
+  if (retainedBaseSequence < 0) {
+    throw new SyncEngineError(
+      "confirmedLog cannot contain more entries than confirmedSequence",
+    );
+  }
+
+  for (let index = 0; index < state.confirmedLog.length; index += 1) {
+    const entry = state.confirmedLog[index];
+    if (entry === undefined) {
+      throw new SyncEngineError(
+        `confirmedLog is missing an entry at array index ${index}`,
+      );
+    }
+    const expectedSequence = retainedBaseSequence + index + 1;
+    if (entry.sequence !== expectedSequence) {
+      throw new LogGapError(expectedSequence, entry.sequence);
+    }
+  }
+
+  return retainedBaseSequence;
 }
 
 function assertSameCommittedPosition<State, Intent, Operation>(
