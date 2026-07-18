@@ -9,6 +9,11 @@ import type { NextSyncServer } from "./types";
 
 export * from "./server";
 export * from "./d1";
+export {
+  createD1LogSyncAuthority,
+  createD1RowSyncAuthority,
+} from "./d1-correctness";
+export type { TransactionalD1DatabaseLike } from "./d1-correctness";
 
 export interface NextSyncConfigInput {
   readonly d1?: {
