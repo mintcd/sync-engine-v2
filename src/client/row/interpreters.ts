@@ -3,7 +3,6 @@ import type { ProposedOperation } from "../../protocol";
 import type { ReplicaInterpreter } from "../../replica";
 import type { LogInterpreter } from "../../server";
 import type { ReplicaSchemaContract } from "../../schema";
-import type { JsonCodec } from "../../wire";
 import {
   applyRowOperation,
   normalizeRowOperation,
@@ -69,15 +68,6 @@ export function createRowLogInterpreter<
   };
 }
 
-export function createRowOperationCodec(
-  schema: ReplicaSchemaContract,
-): JsonCodec<RowOperation> {
-  return {
-    encode: (value) => normalizeRowOperation(schema, value),
-    decode: (value) => normalizeRowOperation(schema, value),
-  };
-}
-
 function toRowRejection(error: unknown): RowRejection {
   return {
     code: "invalid-row-operation",
@@ -87,3 +77,6 @@ function toRowRejection(error: unknown): RowRejection {
         : `invalid row operation: ${String(error)}`,
   };
 }
+
+// Preserve the previous row-module export while keeping codec logic separate.
+export { createRowOperationCodec } from "./codec";
