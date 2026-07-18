@@ -1,5 +1,9 @@
 # Architecture
 
+For a concrete, end-to-end trace of a local write, synchronization rounds,
+pagination, lost-response recovery, React lifecycle, and debugging breakpoints,
+read [Mechanism Walkthrough](mechanism-walkthrough.md).
+
 ## Core model
 
 Each application stream has one canonical committed log:
@@ -297,6 +301,14 @@ The repository contains:
 Backoff policy, stream authorization, deployment-specific authentication,
 advanced projection policy, decision retention, protocol snapshots, and log
 compaction remain separate layers.
+
+## Guides
+
+- [Mechanism Walkthrough](mechanism-walkthrough.md): concrete local-write and
+  sync traces, recovery cases, React lifecycle, reading paths, and debugging
+  breakpoints.
+- [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md): source-tree map and module
+  responsibilities.
 
 ## Decisions
 
