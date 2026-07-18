@@ -32,6 +32,12 @@ export interface IndexedDbReplicaStatus {
   readonly unacknowledgedResolutionCount: number;
 }
 
+export interface IndexedDbReplicaViewSnapshot<State> {
+  readonly clientId: string;
+  readonly optimisticState: State;
+  readonly status: IndexedDbReplicaStatus;
+}
+
 export interface IndexedDbMergeResult<
   State,
   Intent,
@@ -83,6 +89,19 @@ export class IndexedDbReplicaStore<
   public async readOptimisticState(): Promise<State> {
     const record = await this.#readRecord();
     return materializeOptimisticState(record.replica, this.#interpreter);
+  }
+
+  /** Derive application state and status from the same IndexedDB record. */
+  public async readViewSnapshot(): Promise<IndexedDbReplicaViewSnapshot<State>> {
+    const record = await this.#readRecord();
+    return {
+      clientId: record.replica.clientId,
+      optimisticState: materializeOptimisticState(
+        record.replica,
+        this.#interpreter,
+      ),
+      status: statusFromRecord(record),
+    };
   }
 
   public async readStatus(): Promise<IndexedDbReplicaStatus> {
