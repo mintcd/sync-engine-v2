@@ -51,23 +51,19 @@ export interface CreateReplicaViewOptions<
   readonly store: SyncReplicaStore<Rejection>;
 }
 
-/** Cache the durable replica as an immutable, observable application view. */
+/** Cache one coherent durable store version as an observable application view. */
 export async function createReplicaView<
   const Schema extends ReplicaSchemaContract,
   Rejection = JsonValue,
 >(options: CreateReplicaViewOptions<Schema, Rejection>): Promise<ReplicaView<Schema>> {
-  const initialReplica = await options.store.readReplicaState();
-  assertDatabaseStateSchema(options.schema, initialReplica.confirmedState);
-
-  let clientId = initialReplica.clientId;
+  const initial = await options.store.readViewSnapshot();
+  let clientId = initial.clientId;
   let phase: SyncClientPhase = "idle";
   let error: Error | undefined;
   let revision = 0;
-  let optimisticState = freezeDatabaseState(
-    await options.store.readOptimisticState(),
-  );
+  let optimisticState = freezeDatabaseState(initial.optimisticState);
   assertDatabaseStateSchema(options.schema, optimisticState);
-  let status = await options.store.readStatus();
+  let status = initial.status;
   let snapshot = makeSnapshot(
     options.schema,
     optimisticState,
@@ -77,6 +73,7 @@ export async function createReplicaView<
     revision,
   );
   const listeners = new Set<() => void>();
+  let refreshTail: Promise<void> = Promise.resolve();
 
   function emit(): void {
     snapshot = makeSnapshot(
@@ -92,25 +89,30 @@ export async function createReplicaView<
     }
   }
 
-  async function refresh(
+  function refresh(
     refreshOptions?: ReplicaViewRefreshOptions,
   ): Promise<IndexedDbReplicaStatus> {
-    if (refreshOptions !== undefined) {
-      phase = refreshOptions.phase;
-      error = refreshOptions.error;
-    }
+    const task = refreshTail.then(async () => {
+      if (refreshOptions !== undefined) {
+        phase = refreshOptions.phase;
+        error = refreshOptions.error;
+      }
 
-    const replica = await options.store.readReplicaState();
-    clientId = replica.clientId;
-    assertDatabaseStateSchema(options.schema, replica.confirmedState);
-    optimisticState = freezeDatabaseState(
-      await options.store.readOptimisticState(),
+      const next = await options.store.readViewSnapshot();
+      clientId = next.clientId;
+      optimisticState = freezeDatabaseState(next.optimisticState);
+      assertDatabaseStateSchema(options.schema, optimisticState);
+      status = next.status;
+      revision += 1;
+      emit();
+      return status;
+    });
+
+    refreshTail = task.then(
+      () => undefined,
+      () => undefined,
     );
-    assertDatabaseStateSchema(options.schema, optimisticState);
-    status = await options.store.readStatus();
-    revision += 1;
-    emit();
-    return status;
+    return task;
   }
 
   return {
