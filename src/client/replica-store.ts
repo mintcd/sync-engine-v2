@@ -12,9 +12,17 @@ import type { EnqueueOperationInput, ReplicaState } from "../replica";
 import type { JsonValue } from "../wire";
 import type { ReplicaDatabaseState, RowOperation } from "./row";
 
+export interface SyncReplicaStoreSnapshot {
+  readonly clientId: string;
+  readonly optimisticState: ReplicaDatabaseState;
+  readonly status: IndexedDbReplicaStatus;
+}
+
 /** Durable persistence port used by the row-sync runtime. */
 export interface SyncReplicaStore<Rejection = JsonValue> {
   readonly streamId: string;
+  /** Read the application state and counters from one durable store version. */
+  readViewSnapshot(): Promise<SyncReplicaStoreSnapshot>;
   readReplicaState(): Promise<
     ReplicaState<ReplicaDatabaseState, RowOperation, RowOperation>
   >;
