@@ -1,6 +1,6 @@
 export class SyncEngineError extends Error {
-  public constructor(message: string) {
-    super(message);
+  public constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = new.target.name;
   }
 }
@@ -10,7 +10,28 @@ export class InvalidSequenceError extends SyncEngineError {
     public readonly label: string,
     public readonly value: unknown,
   ) {
+    super(
+      `${label} must be a safe integer in its permitted range; received ${String(value)}`,
+    );
+  }
+}
+
+export class InvalidLimitError extends SyncEngineError {
+  public constructor(
+    public readonly label: string,
+    public readonly value: unknown,
+  ) {
     super(`${label} must be a safe integer in its permitted range; received ${String(value)}`);
+  }
+}
+
+export class ProtocolLimitExceededError extends SyncEngineError {
+  public constructor(
+    public readonly label: string,
+    public readonly received: number,
+    public readonly maximum: number,
+  ) {
+    super(`${label} contains ${received} items, exceeding the maximum of ${maximum}`);
   }
 }
 
@@ -52,6 +73,14 @@ export class OperationIdentityConflictError extends SyncEngineError {
   }
 }
 
+export class OperationIntentConflictError extends SyncEngineError {
+  public constructor(public readonly operationId: string) {
+    super(
+      `operationId ${JSON.stringify(operationId)} was reused with a different intent hash`,
+    );
+  }
+}
+
 export class ClientSequenceConflictError extends SyncEngineError {
   public constructor(
     public readonly clientId: string,
@@ -65,6 +94,8 @@ export class ClientSequenceConflictError extends SyncEngineError {
     );
   }
 }
+
+export class MalformedSyncRequestError extends SyncEngineError {}
 
 export class MalformedSyncResponseError extends SyncEngineError {}
 
@@ -84,10 +115,12 @@ export class LogDivergenceError extends SyncEngineError {
     public readonly sequence: number,
     public readonly expectedOperationId: string,
     public readonly receivedOperationId: string,
+    public readonly detail?: string,
   ) {
     super(
       `canonical log diverged at sequence ${sequence}: expected operation ` +
-        `${JSON.stringify(expectedOperationId)}, received ${JSON.stringify(receivedOperationId)}`,
+        `${JSON.stringify(expectedOperationId)}, received ${JSON.stringify(receivedOperationId)}` +
+        (detail === undefined ? "" : ` (${detail})`),
     );
   }
 }
@@ -95,5 +128,37 @@ export class LogDivergenceError extends SyncEngineError {
 export class DecisionConflictError extends SyncEngineError {
   public constructor(public readonly operationId: string) {
     super(`conflicting permanent decisions were observed for ${JSON.stringify(operationId)}`);
+  }
+}
+
+export class UnsupportedProtocolVersionError extends SyncEngineError {
+  public constructor(public readonly received: unknown) {
+    super(`unsupported sync protocol version ${JSON.stringify(received)}`);
+  }
+}
+
+export class WireEncodeError extends SyncEngineError {
+  public constructor(
+    public readonly path: string,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(`${path}: ${message}`, options);
+  }
+}
+
+export class WireDecodeError extends SyncEngineError {
+  public constructor(
+    public readonly path: string,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(`${path}: ${message}`, options);
+  }
+}
+
+export class InvalidJsonValueError extends SyncEngineError {
+  public constructor(public readonly path: string, message: string) {
+    super(`${path}: ${message}`);
   }
 }

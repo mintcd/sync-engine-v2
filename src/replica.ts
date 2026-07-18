@@ -3,17 +3,22 @@ import {
   DuplicateOperationIdError,
   LogDivergenceError,
   LogGapError,
-  MalformedSyncResponseError,
   SyncEngineError,
 } from "./errors.js";
 import {
   assertClientSequence,
-  assertLogSequence,
   assertNonEmptyString,
+  assertSyncResponse,
 } from "./invariants.js";
+import {
+  assertNonNegativeSafeInteger,
+  assertPositiveSafeInteger,
+  DEFAULT_PROTOCOL_LIMITS,
+} from "./limits.js";
 import type {
   AcceptedProposalDecision,
   CommittedOperation,
+  IntentHash,
   ProposalDecision,
   ProposedOperation,
   SyncRequest,
@@ -59,6 +64,12 @@ export interface ReplicaInterpreter<State, Intent, Operation> {
     state: Readonly<State>,
     intent: Readonly<Intent>,
   ) => State;
+
+  /** Optional stronger validation for duplicate receipts and log pages. */
+  readonly areCommittedOperationsEqual?: (
+    left: Readonly<Operation>,
+    right: Readonly<Operation>,
+  ) => boolean;
 }
 
 export interface CreateReplicaOptions<State> {
@@ -67,11 +78,28 @@ export interface CreateReplicaOptions<State> {
   readonly nextClientSequence?: number;
 }
 
+export interface EnqueueOperationInput<Intent> {
+  readonly operationId: string;
+  readonly intentHash: IntentHash;
+  readonly intent: Intent;
+}
+
+export interface PrepareSyncRequestOptions {
+  /** Zero creates a pull-only request. */
+  readonly maximumProposals?: number;
+
+  /** Desired canonical page size. The authority may apply a smaller hard cap. */
+  readonly maximumEntries?: number;
+}
+
 export interface MergeSyncResult<State, Intent, Operation, Rejection> {
   readonly state: ReplicaState<State, Intent, Operation>;
 
   /** Decisions learned for the first time during this merge. */
   readonly newlyResolved: readonly ProposalDecision<Operation, Rejection>[];
+
+  /** Whether the replica reached the head observed by this response. */
+  readonly caughtUpToObservedHead: boolean;
 }
 
 export function createReplicaState<State, Intent = never, Operation = never>(
@@ -93,23 +121,29 @@ export function createReplicaState<State, Intent = never, Operation = never>(
 /** Persist the returned state before exposing the local operation to transport. */
 export function enqueueOperation<State, Intent, Operation>(
   state: ReplicaState<State, Intent, Operation>,
-  operationId: string,
-  intent: Intent,
+  input: EnqueueOperationInput<Intent>,
 ): ReplicaState<State, Intent, Operation> {
-  assertNonEmptyString("operationId", operationId);
+  assertNonEmptyString("clientId", state.clientId);
+  assertClientSequence("nextClientSequence", state.nextClientSequence);
+  assertClientSequence("nextClientSequence", state.nextClientSequence + 1);
+  assertNonEmptyString("operationId", input.operationId);
+  assertNonEmptyString("intentHash", input.intentHash);
 
   if (
-    state.confirmedLog.some((entry) => entry.operationId === operationId) ||
-    state.outbox.some((entry) => entry.proposal.operationId === operationId)
+    state.confirmedLog.some((entry) => entry.operationId === input.operationId) ||
+    state.outbox.some(
+      (entry) => entry.proposal.operationId === input.operationId,
+    )
   ) {
-    throw new DuplicateOperationIdError(operationId);
+    throw new DuplicateOperationIdError(input.operationId);
   }
 
   const proposal: ProposedOperation<Intent> = {
-    operationId,
+    operationId: input.operationId,
     clientId: state.clientId,
     clientSequence: state.nextClientSequence,
-    intent,
+    intentHash: input.intentHash,
+    intent: input.intent,
   };
 
   return {
@@ -125,18 +159,25 @@ export function enqueueOperation<State, Intent, Operation>(
  */
 export function prepareSyncRequest<State, Intent, Operation>(
   state: ReplicaState<State, Intent, Operation>,
-  maximumProposals = Number.POSITIVE_INFINITY,
+  options: PrepareSyncRequestOptions = {},
 ): SyncRequest<Intent> {
-  if (
-    maximumProposals !== Number.POSITIVE_INFINITY &&
-    (!Number.isSafeInteger(maximumProposals) || maximumProposals < 1)
-  ) {
-    throw new SyncEngineError(
-      `maximumProposals must be a positive safe integer or Infinity; received ${maximumProposals}`,
-    );
-  }
+  const maximumProposals =
+    options.maximumProposals ??
+    DEFAULT_PROTOCOL_LIMITS.maximumProposalsPerRequest;
+  const maximumEntries =
+    options.maximumEntries ?? DEFAULT_PROTOCOL_LIMITS.maximumEntriesPerResponse;
+  assertNonNegativeSafeInteger("maximumProposals", maximumProposals);
+  assertPositiveSafeInteger("maximumEntries", maximumEntries);
 
   const proposals: ProposedOperation<Intent>[] = [];
+  if (maximumProposals === 0) {
+    return {
+      baseSequence: state.confirmedLog.length,
+      maximumEntries,
+      proposals,
+    };
+  }
+
   for (const entry of state.outbox) {
     if (entry.status === "pending") {
       proposals.push(entry.proposal);
@@ -148,6 +189,7 @@ export function prepareSyncRequest<State, Intent, Operation>(
 
   return {
     baseSequence: state.confirmedLog.length,
+    maximumEntries,
     proposals,
   };
 }
@@ -157,31 +199,21 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
   response: SyncResponse<Operation, Rejection>,
   interpreter: ReplicaInterpreter<State, Intent, Operation>,
 ): MergeSyncResult<State, Intent, Operation, Rejection> {
-  validateResponseShape(response);
+  assertSyncResponse(response);
+
+  if (response.requestedBaseSequence > state.confirmedLog.length) {
+    throw new LogGapError(
+      state.confirmedLog.length + 1,
+      response.requestedBaseSequence + 1,
+    );
+  }
 
   let outbox = [...state.outbox];
   let confirmedLog = [...state.confirmedLog];
   let confirmedState = state.confirmedState;
   const newlyResolved: ProposalDecision<Operation, Rejection>[] = [];
-  const decisionIds = new Set<string>();
 
   for (const decision of response.decisions) {
-    if (decisionIds.has(decision.operationId)) {
-      throw new MalformedSyncResponseError(
-        `response repeats decision for ${JSON.stringify(decision.operationId)}`,
-      );
-    }
-    decisionIds.add(decision.operationId);
-
-    if (decision.status === "accepted") {
-      assertLogSequence("accepted decision sequence", decision.sequence, false);
-      if (decision.sequence > response.headSequence) {
-        throw new MalformedSyncResponseError(
-          `accepted decision ${decision.operationId} is beyond response head`,
-        );
-      }
-    }
-
     const index = outbox.findIndex(
       (entry) => entry.proposal.operationId === decision.operationId,
     );
@@ -204,7 +236,14 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
     }
 
     if (local.status === "accepted") {
-      if (local.sequence !== decision.sequence) {
+      if (
+        local.sequence !== decision.sequence ||
+        !operationsAreEqual(
+          local.operation,
+          decision.operation,
+          interpreter,
+        )
+      ) {
         throw new DecisionConflictError(decision.operationId);
       }
       continue;
@@ -225,11 +264,12 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
       if (existing === undefined) {
         throw new LogGapError(confirmedLog.length + 1, received.sequence);
       }
-      assertSameCommittedPosition(existing, received);
+      assertSameCommittedPosition(existing, received, interpreter);
       outbox = resolveOutboxFromCommitted(
         outbox,
         received,
         newlyResolved,
+        interpreter,
       );
       continue;
     }
@@ -248,6 +288,7 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
       outbox,
       received,
       newlyResolved,
+      interpreter,
     );
   }
 
@@ -261,24 +302,25 @@ export function mergeSyncResponse<State, Intent, Operation, Rejection>(
     if (committed === undefined) {
       throw new LogGapError(entry.sequence, confirmedLog.length + 1);
     }
-    if (committed.operationId !== entry.proposal.operationId) {
-      throw new LogDivergenceError(
-        entry.sequence,
-        entry.proposal.operationId,
-        committed.operationId,
-      );
+    assertProposalMatchesCommitted(entry.proposal, committed);
+    if (
+      !operationsAreEqual(entry.operation, committed.operation, interpreter)
+    ) {
+      throw new DecisionConflictError(committed.operationId);
     }
     return false;
   });
 
+  const nextState: ReplicaState<State, Intent, Operation> = {
+    ...state,
+    confirmedState,
+    confirmedLog,
+    outbox,
+  };
   return {
-    state: {
-      ...state,
-      confirmedState,
-      confirmedLog,
-      outbox,
-    },
+    state: nextState,
     newlyResolved,
+    caughtUpToObservedHead: confirmedLog.length >= response.headSequence,
   };
 }
 
@@ -305,74 +347,30 @@ export function confirmedSequence<State, Intent, Operation>(
   return state.confirmedLog.length;
 }
 
-function validateResponseShape<Operation, Rejection>(
-  response: SyncResponse<Operation, Rejection>,
-): void {
-  assertLogSequence(
-    "requestedBaseSequence",
-    response.requestedBaseSequence,
-    true,
-  );
-  assertLogSequence("headSequence", response.headSequence, true);
-
-  if (response.requestedBaseSequence > response.headSequence) {
-    throw new MalformedSyncResponseError(
-      "requestedBaseSequence cannot be greater than headSequence",
-    );
-  }
-
-  if (response.entries.length === 0) {
-    if (response.requestedBaseSequence !== response.headSequence) {
-      throw new MalformedSyncResponseError(
-        "an unpaginated response with a missing suffix must contain entries",
-      );
-    }
-    return;
-  }
-
-  let expected = response.requestedBaseSequence + 1;
-  for (const entry of response.entries) {
-    assertLogSequence("committed operation sequence", entry.sequence, false);
-    assertNonEmptyString("committed operationId", entry.operationId);
-    assertNonEmptyString("committed origin clientId", entry.origin.clientId);
-    assertClientSequence(
-      "committed origin clientSequence",
-      entry.origin.clientSequence,
-    );
-
-    if (entry.sequence !== expected) {
-      throw new MalformedSyncResponseError(
-        `response entries must be contiguous from sequence ${response.requestedBaseSequence + 1}`,
-      );
-    }
-    expected += 1;
-  }
-
-  const last = response.entries[response.entries.length - 1];
-  if (last === undefined || last.sequence !== response.headSequence) {
-    throw new MalformedSyncResponseError(
-      "the final response entry must equal headSequence",
-    );
-  }
-}
-
-function assertSameCommittedPosition<Operation>(
+function assertSameCommittedPosition<State, Intent, Operation>(
   expected: CommittedOperation<Operation>,
   received: CommittedOperation<Operation>,
+  interpreter: ReplicaInterpreter<State, Intent, Operation>,
 ): void {
-  if (expected.operationId !== received.operationId) {
+  const detail = committedMetadataDifference(expected, received);
+  if (
+    detail !== undefined ||
+    !operationsAreEqual(expected.operation, received.operation, interpreter)
+  ) {
     throw new LogDivergenceError(
       received.sequence,
       expected.operationId,
       received.operationId,
+      detail ?? "canonical operation payload differs",
     );
   }
 }
 
-function resolveOutboxFromCommitted<Intent, Operation, Rejection>(
+function resolveOutboxFromCommitted<State, Intent, Operation, Rejection>(
   outbox: readonly OutboxEntry<Intent, Operation>[],
   committed: CommittedOperation<Operation>,
   newlyResolved: ProposalDecision<Operation, Rejection>[],
+  interpreter: ReplicaInterpreter<State, Intent, Operation>,
 ): OutboxEntry<Intent, Operation>[] {
   const index = outbox.findIndex(
     (entry) => entry.proposal.operationId === committed.operationId,
@@ -386,18 +384,17 @@ function resolveOutboxFromCommitted<Intent, Operation, Rejection>(
     throw new SyncEngineError("outbox index disappeared during log merge");
   }
 
-  if (
-    local.proposal.clientId !== committed.origin.clientId ||
-    local.proposal.clientSequence !== committed.origin.clientSequence
-  ) {
-    throw new LogDivergenceError(
-      committed.sequence,
-      local.proposal.operationId,
-      committed.operationId,
-    );
-  }
+  assertProposalMatchesCommitted(local.proposal, committed);
 
-  if (local.status === "accepted" && local.sequence !== committed.sequence) {
+  if (
+    local.status === "accepted" &&
+    (local.sequence !== committed.sequence ||
+      !operationsAreEqual(
+        local.operation,
+        committed.operation,
+        interpreter,
+      ))
+  ) {
     throw new DecisionConflictError(committed.operationId);
   }
 
@@ -414,4 +411,56 @@ function resolveOutboxFromCommitted<Intent, Operation, Rejection>(
   const next = [...outbox];
   next.splice(index, 1);
   return next;
+}
+
+function assertProposalMatchesCommitted<Intent, Operation>(
+  proposal: ProposedOperation<Intent>,
+  committed: CommittedOperation<Operation>,
+): void {
+  let detail: string | undefined;
+  if (proposal.operationId !== committed.operationId) {
+    detail = "operationId differs";
+  } else if (proposal.clientId !== committed.origin.clientId) {
+    detail = "origin clientId differs";
+  } else if (proposal.clientSequence !== committed.origin.clientSequence) {
+    detail = "origin clientSequence differs";
+  } else if (proposal.intentHash !== committed.origin.intentHash) {
+    detail = "origin intentHash differs";
+  }
+
+  if (detail !== undefined) {
+    throw new LogDivergenceError(
+      committed.sequence,
+      proposal.operationId,
+      committed.operationId,
+      detail,
+    );
+  }
+}
+
+function committedMetadataDifference<Operation>(
+  expected: CommittedOperation<Operation>,
+  received: CommittedOperation<Operation>,
+): string | undefined {
+  if (expected.operationId !== received.operationId) {
+    return "operationId differs";
+  }
+  if (expected.origin.clientId !== received.origin.clientId) {
+    return "origin clientId differs";
+  }
+  if (expected.origin.clientSequence !== received.origin.clientSequence) {
+    return "origin clientSequence differs";
+  }
+  if (expected.origin.intentHash !== received.origin.intentHash) {
+    return "origin intentHash differs";
+  }
+  return undefined;
+}
+
+function operationsAreEqual<State, Intent, Operation>(
+  left: Readonly<Operation>,
+  right: Readonly<Operation>,
+  interpreter: ReplicaInterpreter<State, Intent, Operation>,
+): boolean {
+  return interpreter.areCommittedOperationsEqual?.(left, right) ?? true;
 }

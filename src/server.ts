@@ -1,18 +1,27 @@
 import {
   ClientSequenceConflictError,
   OperationIdentityConflictError,
+  OperationIntentConflictError,
   SyncEngineError,
   UnknownBaseSequenceError,
 } from "./errors.js";
 import {
   assertContiguousLog,
   assertLogSequence,
-  assertProposalBatch,
+  assertNonEmptyString,
+  assertSubmissionIdentity,
+  assertSyncRequest,
+  assertSyncResponse,
 } from "./invariants.js";
+import {
+  resolveProtocolLimits,
+} from "./limits.js";
+import type { ProtocolLimits } from "./limits.js";
 import type {
   CommittedOperation,
   DecisionDraft,
   OperationIdentity,
+  OperationSubmissionIdentity,
   ProposalDecision,
   ProposedOperation,
   SyncRequest,
@@ -34,7 +43,7 @@ export interface LogInterpreter<State, Intent, Operation, Rejection> {
 }
 
 export interface StoredProposalDecision<Operation, Rejection> {
-  readonly identity: OperationIdentity;
+  readonly identity: OperationSubmissionIdentity;
   readonly decision: ProposalDecision<Operation, Rejection>;
 }
 
@@ -47,6 +56,7 @@ export interface LogServerSnapshot<State, Operation, Rejection> {
 export interface InMemoryLogServerOptions<State, Intent, Operation, Rejection> {
   readonly initialState: State;
   readonly interpreter: LogInterpreter<State, Intent, Operation, Rejection>;
+  readonly limits?: Partial<ProtocolLimits>;
   readonly snapshot?: LogServerSnapshot<State, Operation, Rejection>;
 }
 
@@ -54,7 +64,7 @@ function clientPositionKey(identity: OperationIdentity): string {
   return `${identity.clientId}\u0000${identity.clientSequence}`;
 }
 
-function sameIdentity(
+function sameOperationIdentity(
   left: OperationIdentity,
   right: OperationIdentity,
 ): boolean {
@@ -73,6 +83,7 @@ function sameIdentity(
  */
 export class InMemoryLogServer<State, Intent, Operation, Rejection> {
   readonly #interpreter: LogInterpreter<State, Intent, Operation, Rejection>;
+  readonly #limits: ProtocolLimits;
   #state: State;
   readonly #log: CommittedOperation<Operation>[];
   readonly #decisionsByOperationId = new Map<
@@ -85,6 +96,7 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
     options: InMemoryLogServerOptions<State, Intent, Operation, Rejection>,
   ) {
     this.#interpreter = options.interpreter;
+    this.#limits = resolveProtocolLimits(options.limits);
 
     if (options.snapshot === undefined) {
       this.#state = options.initialState;
@@ -100,18 +112,7 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
       this.#restoreDecision(record);
     }
 
-    for (const entry of this.#log) {
-      const record = this.#decisionsByOperationId.get(entry.operationId);
-      if (
-        record === undefined ||
-        record.decision.status !== "accepted" ||
-        record.decision.sequence !== entry.sequence
-      ) {
-        throw new SyncEngineError(
-          `snapshot log entry ${entry.operationId} has no matching accepted decision`,
-        );
-      }
-    }
+    this.#validateRestoredSnapshot();
   }
 
   public get headSequence(): number {
@@ -126,6 +127,10 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
     return [...this.#log];
   }
 
+  public get limits(): Readonly<ProtocolLimits> {
+    return this.#limits;
+  }
+
   public getDecision(
     operationId: string,
   ): ProposalDecision<Operation, Rejection> | undefined {
@@ -133,31 +138,41 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
   }
 
   /**
-   * Decide a batch idempotently, then return the complete canonical suffix that
-   * the requesting client does not yet know.
+   * Decide a batch idempotently, then return one contiguous canonical page.
+   * Decisions may refer to accepted entries beyond this page.
    */
   public synchronize(
     request: SyncRequest<Intent>,
   ): SyncResponse<Operation, Rejection> {
-    assertLogSequence("baseSequence", request.baseSequence, true);
+    assertSyncRequest(request, this.#limits);
     if (request.baseSequence > this.headSequence) {
       throw new UnknownBaseSequenceError(
         request.baseSequence,
         this.headSequence,
       );
     }
-    assertProposalBatch(request.proposals);
 
     const decisions = request.proposals.map((proposal) =>
       this.#processProposal(proposal),
     );
 
-    return {
+    const pageSize = Math.min(
+      request.maximumEntries,
+      this.#limits.maximumEntriesPerResponse,
+    );
+    const entries = this.#log.slice(
+      request.baseSequence,
+      request.baseSequence + pageSize,
+    );
+    const response: SyncResponse<Operation, Rejection> = {
       requestedBaseSequence: request.baseSequence,
+      throughSequence: request.baseSequence + entries.length,
       headSequence: this.headSequence,
-      entries: this.#log.slice(request.baseSequence),
+      entries,
       decisions,
     };
+    assertSyncResponse(response, this.#limits);
+    return response;
   }
 
   public snapshot(): LogServerSnapshot<State, Operation, Rejection> {
@@ -176,8 +191,11 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
     );
 
     if (existingByOperationId !== undefined) {
-      if (!sameIdentity(existingByOperationId.identity, proposal)) {
+      if (!sameOperationIdentity(existingByOperationId.identity, proposal)) {
         throw new OperationIdentityConflictError(proposal.operationId);
+      }
+      if (existingByOperationId.identity.intentHash !== proposal.intentHash) {
+        throw new OperationIntentConflictError(proposal.operationId);
       }
       return existingByOperationId.decision;
     }
@@ -215,6 +233,7 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
       origin: {
         clientId: proposal.clientId,
         clientSequence: proposal.clientSequence,
+        intentHash: proposal.intentHash,
       },
       operation: draft.operation,
     };
@@ -235,7 +254,7 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
   }
 
   #storeDecision(
-    identity: OperationIdentity,
+    identity: OperationSubmissionIdentity,
     decision: ProposalDecision<Operation, Rejection>,
   ): void {
     const record: StoredProposalDecision<Operation, Rejection> = {
@@ -243,6 +262,7 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
         operationId: identity.operationId,
         clientId: identity.clientId,
         clientSequence: identity.clientSequence,
+        intentHash: identity.intentHash,
       },
       decision,
     };
@@ -257,6 +277,22 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
   #restoreDecision(
     record: StoredProposalDecision<Operation, Rejection>,
   ): void {
+    assertSubmissionIdentity("stored decision identity", record.identity);
+    assertNonEmptyString("stored decision operationId", record.decision.operationId);
+    if (record.decision.operationId !== record.identity.operationId) {
+      throw new SyncEngineError(
+        `stored decision operationId ${JSON.stringify(record.decision.operationId)} ` +
+          `does not match identity ${JSON.stringify(record.identity.operationId)}`,
+      );
+    }
+    if (record.decision.status === "accepted") {
+      assertLogSequence(
+        "stored accepted decision sequence",
+        record.decision.sequence,
+        false,
+      );
+    }
+
     const operationId = record.identity.operationId;
     if (this.#decisionsByOperationId.has(operationId)) {
       throw new SyncEngineError(
@@ -280,5 +316,50 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
 
     this.#decisionsByOperationId.set(operationId, record);
     this.#operationIdByClientPosition.set(positionKey, operationId);
+  }
+
+  #validateRestoredSnapshot(): void {
+    for (const entry of this.#log) {
+      const record = this.#decisionsByOperationId.get(entry.operationId);
+      if (
+        record === undefined ||
+        record.decision.status !== "accepted" ||
+        record.decision.sequence !== entry.sequence
+      ) {
+        throw new SyncEngineError(
+          `snapshot log entry ${entry.operationId} has no matching accepted decision`,
+        );
+      }
+      this.#assertIdentityMatchesEntry(record.identity, entry);
+    }
+
+    for (const record of this.#decisionsByOperationId.values()) {
+      if (record.decision.status !== "accepted") {
+        continue;
+      }
+      const entry = this.#log[record.decision.sequence - 1];
+      if (entry === undefined || entry.operationId !== record.identity.operationId) {
+        throw new SyncEngineError(
+          `accepted decision ${record.identity.operationId} has no matching canonical entry`,
+        );
+      }
+      this.#assertIdentityMatchesEntry(record.identity, entry);
+    }
+  }
+
+  #assertIdentityMatchesEntry(
+    identity: OperationSubmissionIdentity,
+    entry: CommittedOperation<Operation>,
+  ): void {
+    if (
+      identity.operationId !== entry.operationId ||
+      identity.clientId !== entry.origin.clientId ||
+      identity.clientSequence !== entry.origin.clientSequence ||
+      identity.intentHash !== entry.origin.intentHash
+    ) {
+      throw new SyncEngineError(
+        `snapshot identity for ${JSON.stringify(identity.operationId)} does not match its canonical entry`,
+      );
+    }
   }
 }

@@ -9,9 +9,9 @@ A client must create and durably store an operation before the server can assign
 
 ## Decision
 
-Every proposal receives a stable `operationId`, `clientId`, and monotone `clientSequence` before transmission. A canonical `sequence` is allocated only when the proposal is accepted.
+Every proposal receives a stable `operationId`, `clientId`, monotone `clientSequence`, and deterministic `intentHash` before transmission. A canonical `sequence` is allocated only when the proposal is accepted.
 
-`operationId` identifies the logical operation. `clientSequence` orders one client's proposals and serves as a secondary identity guard. `sequence` identifies the operation's canonical log position.
+`operationId` identifies the logical operation. `clientSequence` orders one client's proposals and serves as a secondary identity guard. `intentHash` binds that identity to one submitted payload. `sequence` identifies the operation's canonical log position.
 
 ## Consequences
 
@@ -19,4 +19,5 @@ Every proposal receives a stable `operationId`, `clientId`, and monotone `client
 - The server can return the original decision after a lost response.
 - Reusing an operation ID with another client identity is a protocol error.
 - Reusing a client sequence with another operation ID is also a protocol error.
-- Protocol v0 treats a same-identity retry as the same request and returns the original decision. The generic reference server does not compare arbitrary intent payloads; a persistent adapter may store a canonical request digest when same-ID/different-payload diagnostics are required.
+- Reusing an otherwise identical submission identity with another `intentHash` is a protocol error.
+- Persistent adapters must store the fingerprint with the permanent decision.
