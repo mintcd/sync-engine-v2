@@ -23,7 +23,7 @@ export function statusFromRecord<State, Intent, Operation, Rejection>(
   }
 
   return {
-    confirmedSequence: record.replica.confirmedLog.length,
+    confirmedSequence: record.replica.confirmedSequence,
     pendingProposalCount,
     acceptedAwaitingConfirmationCount,
     unacknowledgedResolutionCount: record.resolutions.length,
@@ -92,12 +92,42 @@ export function assertReplicaRecord<State, Intent, Operation, Rejection>(
       "nextClientSequence is invalid",
     );
   }
+  if (
+    !Number.isSafeInteger(value.replica.confirmedSequence) ||
+    (value.replica.confirmedSequence as number) < 0
+  ) {
+    throw new IndexedDbReplicaRecordError(
+      expectedStreamId,
+      "confirmedSequence is invalid",
+    );
+  }
   if (!Array.isArray(value.replica.confirmedLog)) {
     throw new IndexedDbReplicaRecordError(
       expectedStreamId,
       "confirmedLog is not an array",
     );
   }
+
+  const confirmedSequence = value.replica.confirmedSequence as number;
+  if (value.replica.confirmedLog.length > confirmedSequence) {
+    throw new IndexedDbReplicaRecordError(
+      expectedStreamId,
+      "confirmedLog contains more entries than confirmedSequence",
+    );
+  }
+  const retainedBaseSequence =
+    confirmedSequence - value.replica.confirmedLog.length;
+  for (let index = 0; index < value.replica.confirmedLog.length; index += 1) {
+    const entry = value.replica.confirmedLog[index];
+    const expectedSequence = retainedBaseSequence + index + 1;
+    if (!isRecord(entry) || entry.sequence !== expectedSequence) {
+      throw new IndexedDbReplicaRecordError(
+        expectedStreamId,
+        `confirmedLog entry ${index} must have sequence ${expectedSequence}`,
+      );
+    }
+  }
+
   if (!Array.isArray(value.replica.outbox)) {
     throw new IndexedDbReplicaRecordError(
       expectedStreamId,
