@@ -65,8 +65,8 @@ export interface ReplicaInterpreter<State, Intent, Operation> {
     intent: Readonly<Intent>,
   ) => State;
 
-  /** Optional stronger validation for duplicate receipts and log pages. */
-  readonly areCommittedOperationsEqual?: (
+  /** Compare canonical payloads when validating duplicate receipts and pages. */
+  readonly areCommittedOperationsEqual: (
     left: Readonly<Operation>,
     right: Readonly<Operation>,
   ) => boolean;
@@ -462,5 +462,5 @@ function operationsAreEqual<State, Intent, Operation>(
   right: Readonly<Operation>,
   interpreter: ReplicaInterpreter<State, Intent, Operation>,
 ): boolean {
-  return interpreter.areCommittedOperationsEqual?.(left, right) ?? true;
+  return interpreter.areCommittedOperationsEqual(left, right);
 }
