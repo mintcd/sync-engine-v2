@@ -72,6 +72,8 @@ export interface SyncClient<
   readResolutions(): Promise<
     readonly ProposalDecision<RowOperation, Rejection>[]
   >;
+  /** Delete locally retained canonical entries through an absolute sequence. */
+  deleteCommittedLogPrefix(throughSequence: number): Promise<number>;
   acknowledgeResolutions(operationIds: Iterable<string>): Promise<number>;
   close(): Promise<void>;
 }
@@ -192,6 +194,10 @@ export async function createSyncClient<
     readResolutions() {
       assertOpen();
       return options.store.readResolutions();
+    },
+    deleteCommittedLogPrefix(throughSequence) {
+      assertOpen();
+      return options.store.deleteCommittedLogPrefix(throughSequence);
     },
     async acknowledgeResolutions(operationIds) {
       assertOpen();
