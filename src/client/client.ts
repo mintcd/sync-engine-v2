@@ -43,7 +43,10 @@ export type {
   SyncClientPhase,
   SyncClientSnapshot,
 } from "./replica-view";
-export type { SyncReplicaStore } from "./replica-store";
+export type {
+  SyncReplicaStore,
+  SyncReplicaStoreSnapshot,
+} from "./replica-store";
 
 export interface SyncClient<
   Schema extends ReplicaSchemaContract,
@@ -61,6 +64,10 @@ export interface SyncClient<
   enqueueOperation(
     operation: RowOperation,
   ): Promise<ProposedOperation<RowOperation>>;
+  /**
+   * Drain work through a final coherent post-merge store snapshot. Operations
+   * durably enqueued after that snapshot are left for the next sync call.
+   */
   sync(): Promise<void>;
   readResolutions(): Promise<
     readonly ProposalDecision<RowOperation, Rejection>[]
