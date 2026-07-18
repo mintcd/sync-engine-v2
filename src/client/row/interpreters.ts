@@ -3,11 +3,9 @@ import type { ProposedOperation } from "../../protocol";
 import type { ReplicaInterpreter } from "../../replica";
 import type { LogInterpreter } from "../../server";
 import type { ReplicaSchemaContract } from "../../schema";
-import {
-  applyRowOperation,
-  normalizeRowOperation,
-} from "./operations";
+import { normalizeRowOperation } from "./normalization";
 import { assertRowReplicationSchema } from "./schema";
+import { applyRowOperation } from "./state";
 import type {
   ReplicaDatabaseState,
   RowOperation,
