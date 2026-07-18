@@ -1,5 +1,5 @@
-import { SchemaBindingError } from "./errors.js";
-import type { D1DatabaseLike } from "./discover.js";
+import { SchemaBindingError } from "./errors";
+import type { D1DatabaseLike } from "./discover";
 
 export interface SelectedD1Binding {
   readonly bindingName: string;

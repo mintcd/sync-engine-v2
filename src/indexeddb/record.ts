@@ -1,13 +1,13 @@
-import type { ProposalDecision } from "../protocol.js";
+import type { ProposalDecision } from "../protocol";
 import {
   IndexedDbReplicaError,
   IndexedDbReplicaRecordError,
-} from "./errors.js";
+} from "./errors";
 import {
   INDEXED_DB_REPLICA_SCHEMA_VERSION,
-} from "./schema.js";
-import type { IndexedDbReplicaRecord } from "./schema.js";
-import type { IndexedDbReplicaStatus } from "./store.js";
+} from "./schema";
+import type { IndexedDbReplicaRecord } from "./schema";
+import type { IndexedDbReplicaStatus } from "./store";
 
 export function statusFromRecord<State, Intent, Operation, Rejection>(
   record: IndexedDbReplicaRecord<State, Intent, Operation, Rejection>,

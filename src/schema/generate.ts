@@ -1,5 +1,5 @@
-import { SchemaGenerationError } from "./errors.js";
-import type { ReplicaSchemaContract } from "./types.js";
+import { SchemaGenerationError } from "./errors";
+import type { ReplicaSchemaContract } from "./types";
 
 export interface GenerateReplicaSchemaModuleOptions {
   readonly exportName?: string;

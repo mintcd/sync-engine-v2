@@ -297,3 +297,30 @@ test("opening an existing stream with another client identity is rejected", asyn
 
   await deleteIndexedDbReplicaDatabase(databaseName, factory);
 });
+
+test("opening an existing stream without a client identity reuses the durable identity", async () => {
+  const factory = new IDBFactory();
+  const databaseName = "identity-default-reopen";
+  const first = await openIndexedDbReplicaStore({
+    indexedDB: factory,
+    databaseName,
+    streamId: "notes",
+    initialState: {},
+    interpreter: replicaInterpreter,
+  });
+  const firstClientId = (await first.readReplicaState()).clientId;
+  assert.match(firstClientId, /^client_/);
+  first.close();
+
+  const reopened = await openIndexedDbReplicaStore({
+    indexedDB: factory,
+    databaseName,
+    streamId: "notes",
+    initialState: {},
+    interpreter: replicaInterpreter,
+  });
+  assert.equal((await reopened.readReplicaState()).clientId, firstClientId);
+
+  reopened.close();
+  await deleteIndexedDbReplicaDatabase(databaseName, factory);
+});

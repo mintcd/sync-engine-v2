@@ -1,8 +1,8 @@
-import { IndexedDbReplicaError } from "./errors.js";
+import { IndexedDbReplicaError } from "./errors";
 import {
   INDEXED_DB_REPLICA_SCHEMA_VERSION,
   INDEXED_DB_REPLICA_STORE_NAME,
-} from "./schema.js";
+} from "./schema";
 
 export async function openDatabase(
   factory: IDBFactory,
@@ -26,9 +26,9 @@ export async function openDatabase(
     request.onerror = () =>
       reject(
         request.error ??
-          new IndexedDbReplicaError(
-            `failed to open IndexedDB database ${JSON.stringify(databaseName)}`,
-          ),
+        new IndexedDbReplicaError(
+          `failed to open IndexedDB database ${JSON.stringify(databaseName)}`,
+        ),
       );
     request.onblocked = () => onBlocked?.();
   });
@@ -84,7 +84,7 @@ function transactionToPromise(transaction: IDBTransaction): Promise<void> {
     transaction.onabort = () =>
       reject(
         transaction.error ??
-          new IndexedDbReplicaError("IndexedDB transaction was aborted"),
+        new IndexedDbReplicaError("IndexedDB transaction was aborted"),
       );
     transaction.onerror = () => {
       // The abort event carries the final error and settles this promise.

@@ -1,7 +1,7 @@
 import {
   InvalidLimitError,
   ProtocolLimitExceededError,
-} from "./errors.js";
+} from "./errors";
 
 export interface ProtocolLimits {
   /** Maximum proposals accepted in one sync request. */

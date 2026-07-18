@@ -1,4 +1,4 @@
-import type { SqliteAffinity } from "./types.js";
+import type { SqliteAffinity } from "./types";
 
 /** Apply SQLite's declared-type affinity rules. */
 export function sqliteAffinity(declaredType: string): SqliteAffinity {

@@ -4,7 +4,7 @@ import {
   OperationIntentConflictError,
   SyncEngineError,
   UnknownBaseSequenceError,
-} from "./errors.js";
+} from "./errors";
 import {
   assertContiguousLog,
   assertLogSequence,
@@ -12,11 +12,11 @@ import {
   assertSubmissionIdentity,
   assertSyncRequest,
   assertSyncResponse,
-} from "./invariants.js";
+} from "./invariants";
 import {
   resolveProtocolLimits,
-} from "./limits.js";
-import type { ProtocolLimits } from "./limits.js";
+} from "./limits";
+import type { ProtocolLimits } from "./limits";
 import type {
   CommittedOperation,
   DecisionDraft,
@@ -26,7 +26,7 @@ import type {
   ProposedOperation,
   SyncRequest,
   SyncResponse,
-} from "./protocol.js";
+} from "./protocol";
 
 export interface LogInterpreter<State, Intent, Operation, Rejection> {
   /** Decide, reject, or canonicalize one proposal against the current state. */

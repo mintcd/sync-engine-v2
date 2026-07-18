@@ -1,16 +1,16 @@
-import { SchemaDiscoveryError } from "../errors.js";
-import { REPLICA_SCHEMA_FORMAT_VERSION } from "../types.js";
+import { SchemaDiscoveryError } from "../errors";
+import { REPLICA_SCHEMA_FORMAT_VERSION } from "../types";
 import type {
   ReplicaSchemaContract,
   ReplicaTableContract,
-} from "../types.js";
-import { readTable, readTableRows } from "./catalog.js";
-import { hashNormalizedSchema } from "./hash.js";
-import { normalizeNameSet, readName } from "./scalars.js";
+} from "../types";
+import { readTable, readTableRows } from "./catalog";
+import { hashNormalizedSchema } from "./hash";
+import { normalizeNameSet, readName } from "./scalars";
 import type {
   D1DatabaseLike,
   DiscoverD1SchemaOptions,
-} from "./types.js";
+} from "./types";
 
 const ALWAYS_EXCLUDED_TABLES = new Set([
   "_cf_KV",

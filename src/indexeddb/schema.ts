@@ -1,5 +1,5 @@
-import type { ProposalDecision } from "../protocol.js";
-import type { ReplicaState } from "../replica.js";
+import type { ProposalDecision } from "../protocol";
+import type { ReplicaState } from "../replica";
 
 /** IndexedDB schema understood by this package release. */
 export const INDEXED_DB_REPLICA_SCHEMA_VERSION = 1 as const;

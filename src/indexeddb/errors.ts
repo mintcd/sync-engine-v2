@@ -1,4 +1,4 @@
-import { SyncEngineError } from "../errors.js";
+import { SyncEngineError } from "../errors";
 
 export class IndexedDbReplicaError extends SyncEngineError {}
 

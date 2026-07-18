@@ -1,0 +1,19 @@
+{
+  "name": "sync-engine",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-05-10",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sync_engine_db",
+      "database_id": "48a1d9e3-7c52-4ad1-913f-54f97a74b2a3",
+      "remote": true
+    }
+  ],
+  "vars": {
+    "D1_BINDING": "DB"
+  }
+}

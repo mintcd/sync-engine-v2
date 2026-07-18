@@ -1,5 +1,5 @@
-import { InvalidJsonValueError, SyncEngineError } from "./errors.js";
-import type { IntentHash } from "./protocol.js";
+import { InvalidJsonValueError, SyncEngineError } from "./errors";
+import type { IntentHash } from "./protocol";
 
 /**
  * Deterministically serialize a JSON-compatible value by sorting object keys.

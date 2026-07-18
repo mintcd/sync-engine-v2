@@ -3,27 +3,27 @@ import {
   materializeOptimisticState,
   mergeSyncResponse as reduceMergeSyncResponse,
   prepareSyncRequest as reducePrepareSyncRequest,
-} from "../replica.js";
+} from "../replica";
 import type {
   EnqueueOperationInput,
   MergeSyncResult,
   PrepareSyncRequestOptions,
   ReplicaInterpreter,
   ReplicaState,
-} from "../replica.js";
+} from "../replica";
 import type {
   ProposalDecision,
   ProposedOperation,
   SyncRequest,
   SyncResponse,
-} from "../protocol.js";
-import { requestToPromise, withTransaction } from "./idb.js";
+} from "../protocol";
+import { requestToPromise, withTransaction } from "./idb";
 import {
   appendUniqueResolutions,
   assertReplicaRecord,
   statusFromRecord,
-} from "./record.js";
-import type { IndexedDbReplicaRecord } from "./schema.js";
+} from "./record";
+import type { IndexedDbReplicaRecord } from "./schema";
 
 export interface IndexedDbReplicaStatus {
   readonly confirmedSequence: number;

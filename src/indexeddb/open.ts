@@ -1,20 +1,20 @@
-import { createReplicaState } from "../replica.js";
-import type { ReplicaInterpreter } from "../replica.js";
+import { createReplicaState } from "../replica";
+import type { ReplicaInterpreter } from "../replica";
 import {
   IndexedDbReplicaError,
   IndexedDbReplicaIdentityError,
-} from "./errors.js";
-import { openDatabase, requestToPromise, withTransaction } from "./idb.js";
+} from "./errors";
+import { openDatabase, requestToPromise, withTransaction } from "./idb";
 import {
   assertNonEmptyString,
   assertReplicaRecord,
-} from "./record.js";
+} from "./record";
 import {
   DEFAULT_INDEXED_DB_REPLICA_DATABASE_NAME,
   INDEXED_DB_REPLICA_SCHEMA_VERSION,
-} from "./schema.js";
-import type { IndexedDbReplicaRecord } from "./schema.js";
-import { IndexedDbReplicaStore } from "./store.js";
+} from "./schema";
+import type { IndexedDbReplicaRecord } from "./schema";
+import { IndexedDbReplicaStore } from "./store";
 
 export interface OpenIndexedDbReplicaStoreOptions<
   State,
@@ -22,7 +22,7 @@ export interface OpenIndexedDbReplicaStoreOptions<
   Operation,
 > {
   readonly streamId: string;
-  readonly clientId: string;
+  readonly clientId?: string;
   readonly initialState: State;
   readonly interpreter: ReplicaInterpreter<State, Intent, Operation>;
   readonly databaseName?: string;
@@ -39,7 +39,9 @@ export async function openIndexedDbReplicaStore<
   options: OpenIndexedDbReplicaStoreOptions<State, Intent, Operation>,
 ): Promise<IndexedDbReplicaStore<State, Intent, Operation, Rejection>> {
   assertNonEmptyString("streamId", options.streamId);
-  assertNonEmptyString("clientId", options.clientId);
+  if (options.clientId !== undefined) {
+    assertNonEmptyString("clientId", options.clientId);
+  }
 
   const factory = options.indexedDB ?? globalThis.indexedDB;
   if (factory === undefined) {
@@ -59,6 +61,7 @@ export async function openIndexedDbReplicaStore<
     await withTransaction(database, "readwrite", async (store) => {
       const existing = await requestToPromise(store.get(options.streamId));
       if (existing === undefined) {
+        const clientId = options.clientId ?? createClientId();
         const record: IndexedDbReplicaRecord<
           State,
           Intent,
@@ -68,7 +71,7 @@ export async function openIndexedDbReplicaStore<
           schemaVersion: INDEXED_DB_REPLICA_SCHEMA_VERSION,
           streamId: options.streamId,
           replica: createReplicaState({
-            clientId: options.clientId,
+            clientId,
             initialState: options.initialState,
           }),
           resolutions: [],
@@ -83,7 +86,10 @@ export async function openIndexedDbReplicaStore<
         Operation,
         Rejection
       >(existing, options.streamId);
-      if (record.replica.clientId !== options.clientId) {
+      if (
+        options.clientId !== undefined &&
+        record.replica.clientId !== options.clientId
+      ) {
         throw new IndexedDbReplicaIdentityError(
           options.streamId,
           options.clientId,
@@ -101,6 +107,17 @@ export async function openIndexedDbReplicaStore<
     options.streamId,
     options.interpreter,
   );
+}
+
+function createClientId(): string {
+  const random = globalThis.crypto?.randomUUID?.();
+  if (random !== undefined) {
+    return `client_${random}`;
+  }
+
+  const time = Date.now().toString(36);
+  const entropy = Math.random().toString(36).slice(2, 12);
+  return `client_${time}_${entropy}`;
 }
 
 export async function deleteIndexedDbReplicaDatabase(

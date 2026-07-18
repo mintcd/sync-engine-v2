@@ -2,21 +2,21 @@ import {
   UnsupportedProtocolVersionError,
   WireDecodeError,
   WireEncodeError,
-} from "./errors.js";
-import { canonicalizeJson } from "./fingerprint.js";
+} from "./errors";
+import { canonicalizeJson } from "./fingerprint";
 import {
   assertNonEmptyString,
   assertSyncRequest,
   assertSyncResponse,
-} from "./invariants.js";
+} from "./invariants";
 import {
   assertWithinLimit,
   resolveProtocolLimits,
-} from "./limits.js";
-import type { ProtocolLimits } from "./limits.js";
+} from "./limits";
+import type { ProtocolLimits } from "./limits";
 import {
   SYNC_PROTOCOL_VERSION,
-} from "./protocol.js";
+} from "./protocol";
 import type {
   AcceptedProposalDecision,
   CommittedOperation,
@@ -27,7 +27,7 @@ import type {
   SyncRequestEnvelope,
   SyncResponse,
   SyncResponseEnvelope,
-} from "./protocol.js";
+} from "./protocol";
 
 export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue =

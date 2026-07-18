@@ -6,19 +6,19 @@ import {
   LogGapError,
   MalformedSyncResponseError,
   SyncEngineError,
-} from "./errors.js";
+} from "./errors";
 import {
   assertPositiveSafeInteger,
   assertWithinLimit,
-} from "./limits.js";
-import type { ProtocolLimits } from "./limits.js";
+} from "./limits";
+import type { ProtocolLimits } from "./limits";
 import type {
   CommittedOperation,
   OperationSubmissionIdentity,
   ProposedOperation,
   SyncRequest,
   SyncResponse,
-} from "./protocol.js";
+} from "./protocol";
 
 export function assertNonEmptyString(label: string, value: string): void {
   if (value.length === 0) {

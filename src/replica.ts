@@ -4,17 +4,17 @@ import {
   LogDivergenceError,
   LogGapError,
   SyncEngineError,
-} from "./errors.js";
+} from "./errors";
 import {
   assertClientSequence,
   assertNonEmptyString,
   assertSyncResponse,
-} from "./invariants.js";
+} from "./invariants";
 import {
   assertNonNegativeSafeInteger,
   assertPositiveSafeInteger,
   DEFAULT_PROTOCOL_LIMITS,
-} from "./limits.js";
+} from "./limits";
 import type {
   AcceptedProposalDecision,
   CommittedOperation,
@@ -23,7 +23,7 @@ import type {
   ProposedOperation,
   SyncRequest,
   SyncResponse,
-} from "./protocol.js";
+} from "./protocol";
 
 export interface PendingOutboxEntry<Intent> {
   readonly status: "pending";

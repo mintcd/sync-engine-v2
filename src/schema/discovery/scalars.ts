@@ -1,4 +1,4 @@
-import { SchemaDiscoveryError } from "../errors.js";
+import { SchemaDiscoveryError } from "../errors";
 
 export function normalizeNameSet(
   names: readonly string[] | undefined,

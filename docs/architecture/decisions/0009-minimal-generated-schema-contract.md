@@ -17,16 +17,17 @@ service-worker paths and client construction.
 
 ## Decision
 
-Schema discovery uses Wrangler's programmatic `getPlatformProxy()` API to obtain
-the configured D1 binding and queries SQLite metadata through the D1 Workers
-Binding API.
+Standalone schema discovery uses Wrangler's programmatic `getPlatformProxy()`
+API to obtain the configured D1 binding and queries SQLite metadata through the
+D1 Workers Binding API.
 
 Generation is local-first. Remote bindings are disabled unless explicitly
 requested. Application migrations applied to local D1 are the normal generation
 source; a remote binding is used only deliberately for inspection or drift
 checking.
 
-The generated TypeScript module contains only a versioned schema contract:
+The standalone generated TypeScript module contains only a versioned schema
+contract:
 
 ```text
 schema format version
@@ -43,10 +44,14 @@ It supports composite primary keys and rejects included tables without a declare
 primary key. It excludes Cloudflare, SQLite, D1 migration, and sync-engine
 internal tables.
 
-The generator does not emit D1 IDs, Wrangler binding names, network endpoints,
-a final runtime config, or a global `db` object. React and other clients construct
-their query client at runtime by injecting the generated contract, IndexedDB
-replica, stream identity, authentication, and transport.
+The standalone schema generator does not emit D1 IDs, Wrangler binding names,
+network endpoints, a final runtime config, or a global `db` object. React and
+other clients construct their query client at runtime by injecting the generated
+contract, IndexedDB replica, stream identity, authentication, and transport.
+
+Framework-specific generators may compose the same contract into browser-safe
+application wiring, such as route paths or an IndexedDB database name. They still
+must not emit server binding identities, secrets, or a global database object.
 
 ## Consequences
 

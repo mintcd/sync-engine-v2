@@ -1,21 +1,21 @@
-import { sqliteAffinity } from "../affinity.js";
+import { sqliteAffinity } from "../affinity";
 import {
   SchemaDiscoveryError,
   SchemaTableWithoutPrimaryKeyError,
-} from "../errors.js";
+} from "../errors";
 import type {
   ReplicaColumnContract,
   ReplicaTableContract,
-} from "../types.js";
-import { allRows } from "./query.js";
+} from "../types";
+import { allRows } from "./query";
 import {
   quoteIdentifier,
   readBoolean,
   readInteger,
   readName,
   readText,
-} from "./scalars.js";
-import type { D1QueryExecutorLike } from "./types.js";
+} from "./scalars";
+import type { D1QueryExecutorLike } from "./types";
 
 export interface TableListRow {
   readonly name?: unknown;

@@ -1,8 +1,8 @@
-import { SchemaDiscoveryError } from "../errors.js";
+import { SchemaDiscoveryError } from "../errors";
 import type {
   D1AllResultLike,
   D1QueryExecutorLike,
-} from "./types.js";
+} from "./types";
 
 export async function allRows<Row>(
   executor: D1QueryExecutorLike,

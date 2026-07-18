@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const cli = resolve(root, "bin/sync-engine.mjs");
+const cli = resolve(root, "bin/sync-engine-v2");
 
 test("schema CLI documents local-first generation", () => {
   const result = spawnSync(process.execPath, [cli, "--help"], {
