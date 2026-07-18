@@ -48,6 +48,7 @@ export interface SyncReplicaStore<Rejection = JsonValue> {
       Rejection
     >
   >;
+  deleteCommittedLogPrefix(throughSequence: number): Promise<number>;
   acknowledgeResolutions(operationIds: Iterable<string>): Promise<number>;
   close?(): void | Promise<void>;
 }
