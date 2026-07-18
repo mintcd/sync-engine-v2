@@ -40,6 +40,28 @@ Rejected proposals leave the outbox after the rejection is durably learned. Acce
 
 `inFlight` is runtime scheduling metadata, not replica state. Starting, cancelling, timing out, or losing a request does not move durable entries between queues.
 
+## IndexedDB persistence boundary
+
+The protocol v1 browser adapter stores one record per `streamId`:
+
+```text
+schemaVersion
+streamId
+replica = (clientId, nextClientSequence, confirmedState, confirmedLog, outbox)
+resolutions = accepted/rejected outcomes awaiting application acknowledgement
+```
+
+A local enqueue is one IndexedDB readwrite transaction that reads the latest stream record, allocates `clientSequence`, appends the proposal, and writes the complete next record. A response merge similarly computes the pure replica transition and persists the new replica plus newly learned resolutions in one transaction.
+
+This gives the adapter four important properties:
+
+1. A crash cannot advance a cursor without persisting the corresponding state and outbox transition.
+2. Concurrent tabs sharing one database cannot allocate the same client sequence because overlapping readwrite transactions are serialized.
+3. Starting or losing a network request performs no IndexedDB write.
+4. A crash after response merge cannot erase an application-visible rejection or acceptance notice; resolutions remain durable until acknowledged.
+
+The current schema is snapshot-based and rewrites the stream record as the confirmed log grows. This is an intentional first persistence boundary. Normalized log stores, snapshots, and compaction require an explicit schema migration rather than quietly weakening the atomicity model.
+
 ## Server transition
 
 For a new proposal `p` against current state `s_R`:
@@ -92,7 +114,7 @@ protocolVersion = 1
 streamId
 ```
 
-Runtime codecs validate structural fields, cursor relations, contiguous pages, identities, array limits, and application payloads. Unknown protocol versions are rejected rather than interpreted approximately, a strategy otherwise known as not corrupting the database for convenience.
+Runtime codecs validate structural fields, cursor relations, contiguous pages, identities, array limits, and application payloads. Unknown protocol versions are rejected rather than interpreted approximately.
 
 The core provides default count limits:
 
@@ -116,6 +138,8 @@ Authorities may configure stricter or larger limits. HTTP byte limits, authentic
 9. A client never applies a canonical entry across a gap.
 10. A response page is contiguous and its declared cursors exactly match its entries.
 11. Replaying the same canonical prefix through a deterministic interpreter yields the same state.
+12. IndexedDB enqueue and merge replace one stream record atomically.
+13. Application-visible resolutions remain durable until acknowledged.
 
 ## Liveness assumptions
 
@@ -125,7 +149,7 @@ The protocol does not require a continuously stable network. It requires eventua
 - if appends eventually stop and synchronization succeeds repeatedly, every active client eventually confirms the same log;
 - if all local proposals settle and canonical pages propagate, visible states converge.
 
-Permanent disconnection cannot provide convergence. Physics remains stubbornly unimpressed by retry libraries.
+Permanent disconnection cannot provide convergence.
 
 ## Current implementation boundary
 
@@ -137,11 +161,12 @@ The repository contains:
 - runtime request and response codecs;
 - an in-memory authoritative server;
 - immutable client-replica transitions;
+- an atomic IndexedDB replica adapter with a durable resolution inbox;
 - optimistic materialization across paginated catch-up;
-- validation for gaps, divergence, duplicate identities, changed intent hashes, malformed pages, and corrupted snapshots;
-- deterministic and randomized tests for loss, duplication, delay, retries, pagination, and eventual convergence.
+- validation for gaps, divergence, duplicate identities, changed intent hashes, malformed pages, corrupted snapshots, and persisted client-identity mismatch;
+- deterministic and randomized tests for loss, duplication, delay, retries, pagination, IndexedDB reopen, concurrent browser connections, and eventual convergence.
 
-Production persistence adapters must preserve the same transitions atomically. IndexedDB, D1, transport retries, stream authorization, snapshots, and compaction remain separate layers.
+The D1 authority, transport retries, stream authorization, protocol snapshots, and log compaction remain separate layers.
 
 ## Decisions
 
@@ -152,3 +177,4 @@ Production persistence adapters must preserve the same transitions atomically. I
 - [ADR-0005: Deterministic interpretation and isolated effects](decisions/0005-deterministic-interpretation.md)
 - [ADR-0006: Bind proposal identities to intent fingerprints](decisions/0006-intent-fingerprints.md)
 - [ADR-0007: Use a versioned and paginated wire protocol](decisions/0007-versioned-paginated-protocol.md)
+- [ADR-0008: Persist one atomic IndexedDB record per stream](decisions/0008-indexeddb-atomic-stream-record.md)

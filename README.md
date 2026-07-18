@@ -2,7 +2,7 @@
 
 A correctness-first TypeScript core for replicating a canonical, append-only operation log.
 
-The package defines protocol v1, an in-memory authority used as an executable specification, immutable client-replica transitions, deterministic intent fingerprints, and runtime JSON codecs. IndexedDB, D1, HTTP scheduling, and authentication remain adapters around this core rather than ingredients stirred directly into it until nobody can identify the consistency model.
+The package defines protocol v1, an in-memory authority used as an executable specification, immutable client-replica transitions, deterministic intent fingerprints, runtime JSON codecs, and a durable IndexedDB replica adapter. D1, HTTP scheduling, and authentication remain adapters around this core.
 
 ## State model
 
@@ -86,9 +86,10 @@ Transport messages use a versioned stream envelope:
 - Catch-up is bounded and paginated without dropping accepted optimistic state.
 - Delayed and duplicate responses merge monotonically.
 - A lost push response can be repaired by retry or by later observing the canonical entry.
+- IndexedDB enqueue and response merge are atomic per stream.
 - The network affects progress, not safety.
 
-## Minimal example
+## Minimal core example
 
 ```ts
 import {
@@ -145,7 +146,63 @@ replica = mergeSyncResponse(replica, response, {
 }).state;
 ```
 
-`createIntentHash` accepts JSON-compatible values, canonicalizes object-key order, and returns a SHA-256 digest. It rejects values such as `undefined`, non-finite numbers, cycles, class instances, accessors, and sparse arrays instead of inheriting `JSON.stringify`'s more creative decisions.
+`createIntentHash` accepts JSON-compatible values, canonicalizes object-key order, and returns a SHA-256 digest. It rejects values such as `undefined`, non-finite numbers, cycles, class instances, accessors, and sparse arrays.
+
+## IndexedDB replica
+
+Import the browser adapter from the dedicated subpath:
+
+```ts
+import { createIntentHash } from "@mintcd/sync-engine-v2";
+import {
+  openIndexedDbReplicaStore,
+} from "@mintcd/sync-engine-v2/indexeddb";
+
+const apply = (
+  state: Record<string, unknown>,
+  operation: { type: "put"; key: string; value: unknown },
+) => ({
+  ...state,
+  [operation.key]: operation.value,
+});
+
+const replica = await openIndexedDbReplicaStore<
+  Record<string, unknown>,
+  { type: "put"; key: string; value: unknown },
+  { type: "put"; key: string; value: unknown },
+  string
+>({
+  databaseName: "my-application-sync",
+  streamId: "account/user-1",
+  clientId: "browser-installation-1",
+  initialState: {},
+  interpreter: {
+    applyCommitted: apply,
+    applyOptimistic: apply,
+  },
+});
+
+const intent = { type: "put" as const, key: "title", value: "Offline" };
+await replica.enqueueOperation({
+  operationId: crypto.randomUUID(),
+  intentHash: await createIntentHash(intent),
+  intent,
+});
+
+const request = await replica.prepareSyncRequest({
+  maximumProposals: 32,
+  maximumEntries: 128,
+});
+
+// Send `request` through an application-owned transport, then atomically merge:
+// await replica.mergeSyncResponse(response);
+
+const visibleState = await replica.readOptimisticState();
+```
+
+The adapter stores one atomic record per `streamId`, containing the pure replica state and an application-visible resolution inbox. IndexedDB readwrite transactions serialize concurrent tabs that share the database, so sequence allocation and response merge cannot overwrite one another. Accepted and rejected outcomes remain in `readResolutions()` until explicitly removed with `acknowledgeResolutions()`.
+
+`State`, `Intent`, `Operation`, and `Rejection` values must be compatible with the browser structured-clone algorithm. Protocol v1 deliberately uses a snapshot-based IndexedDB schema. It favors a small correctness surface over write amplification; a future schema version can normalize or compact large logs without changing the replica API.
 
 ## Development
 
@@ -154,12 +211,13 @@ npm ci
 npm run check
 ```
 
-The test suite covers ordering, retry idempotency, changed-intent detection, rejection durability, snapshot restoration, bounded pages, accepted decisions beyond a page, delayed responses, log gaps, divergence, wire-codec validation, and randomized eventual convergence.
+The test suite covers ordering, retry idempotency, changed-intent detection, rejection durability, snapshot restoration, bounded pages, accepted decisions beyond a page, delayed responses, log gaps, divergence, wire-codec validation, IndexedDB reopen and multi-tab transactions, and randomized eventual convergence.
 
 ## Deliberate non-goals of protocol v1
 
-- Persistent IndexedDB and D1 adapters
+- A persistent D1 authority adapter
 - Protocol-level snapshots and log compaction
+- A normalized or compacted IndexedDB history schema
 - Multi-authority consensus
 - Encryption, authentication, and authorization
 - Exactly-once external side effects

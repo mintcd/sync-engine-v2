@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./indexeddb": {
+      "types": "./dist/indexeddb/index.d.ts",
+      "import": "./dist/indexeddb/index.js"
     }
   },
   "files": [
@@ -24,6 +28,7 @@
     "prepack": "npm run build"
   },
   "devDependencies": {
+    "fake-indexeddb": "6.2.5",
     "typescript": "5.8.3"
   },
   "engines": {
