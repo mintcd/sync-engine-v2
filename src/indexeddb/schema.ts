@@ -15,9 +15,10 @@ export const INDEXED_DB_REPLICA_STORE_NAME = "replicas";
  * Durable state for one independent canonical-log stream.
  *
  * Protocol v1 intentionally persists one atomic record per stream. This makes
- * enqueue and response merge read-modify-write transactions with no cursor or
- * projection that can be committed independently. A normalized schema can be
- * introduced later behind a versioned migration when log size requires it.
+ * enqueue, response merge, and committed-log prefix deletion read-modify-write
+ * transactions with no cursor or projection that can be committed
+ * independently. A normalized schema can be introduced later if write
+ * amplification requires it.
  */
 export interface IndexedDbReplicaRecord<
   State,
