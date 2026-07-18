@@ -7,7 +7,7 @@
 
 A React client needs a stable description of replicated tables for local queries
 and TypeScript inference. The previous implementation executed the Wrangler CLI
-for each metadata query, accepted several undocumed JSON output shapes,
+for each metadata query, accepted several undocumented JSON output shapes,
 guessed a single primary key, and generated deployment configuration together
 with a global database singleton.
 
