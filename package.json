@@ -5,6 +5,9 @@
   "description": "A correctness-first core for replicating a canonical operation log.",
   "type": "module",
   "sideEffects": false,
+  "bin": {
+    "sync-engine-v2": "./bin/sync-engine.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,9 +16,14 @@
     "./indexeddb": {
       "types": "./dist/indexeddb/index.d.ts",
       "import": "./dist/indexeddb/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "import": "./dist/schema/index.js"
     }
   },
   "files": [
+    "bin",
     "dist",
     "docs",
     "README.md"
@@ -26,6 +34,14 @@
     "test": "npm run build && node --test test/*.test.js",
     "check": "npm run typecheck && npm test",
     "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "wrangler": ">=4.37.0"
+  },
+  "peerDependenciesMeta": {
+    "wrangler": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "fake-indexeddb": "6.2.5",
