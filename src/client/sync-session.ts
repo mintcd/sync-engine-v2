@@ -20,10 +20,14 @@ export interface RunSyncSessionOptions<Rejection = JsonValue> {
   readonly maximumEntries?: number;
   readonly maximumProposals?: number;
   readonly maximumSyncRounds?: number;
+  /** Return one coherent post-merge durable snapshot status. */
   readonly refreshAfterMerge: () => Promise<IndexedDbReplicaStatus>;
 }
 
-/** Drain proposals and canonical pages until this replica reaches the observed head. */
+/**
+ * Drain proposals and canonical pages through a final coherent post-merge store
+ * snapshot. An enqueue committed after that snapshot belongs to the next sync.
+ */
 export async function runSyncSession<Rejection = JsonValue>(
   options: RunSyncSessionOptions<Rejection>,
 ): Promise<void> {
