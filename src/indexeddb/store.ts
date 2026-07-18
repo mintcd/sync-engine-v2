@@ -1,4 +1,5 @@
 import {
+  deleteCommittedLogPrefix as reduceDeleteCommittedLogPrefix,
   enqueueOperation as reduceEnqueueOperation,
   materializeOptimisticState,
   mergeSyncResponse as reduceMergeSyncResponse,
@@ -171,6 +172,23 @@ export class IndexedDbReplicaStore<
           ...merged,
           status: statusFromRecord(nextRecord),
         },
+      };
+    });
+  }
+
+  /** Atomically delete retained committed entries through an absolute sequence. */
+  public async deleteCommittedLogPrefix(
+    throughSequence: number,
+  ): Promise<number> {
+    return this.#updateRecord((record) => {
+      const previousLength = record.replica.confirmedLog.length;
+      const replica = reduceDeleteCommittedLogPrefix(
+        record.replica,
+        throughSequence,
+      );
+      return {
+        record: { ...record, replica },
+        result: previousLength - replica.confirmedLog.length,
       };
     });
   }
