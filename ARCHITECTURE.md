@@ -29,12 +29,16 @@ Read these modules in order when learning the code:
 2. `src/replica.ts`
 3. `src/server.ts`
 4. `src/indexeddb/store.ts`
-5. `src/client/row.ts`
-6. `src/client/sync-session.ts`
-7. `src/client/replica-view.ts`
-8. `src/client/database.ts`
-9. `src/client/client.ts`
-10. `src/client/transport.ts`, `src/react`, and `src/next`
+5. `src/client/row/types.ts` and `src/client/row/schema.ts`
+6. `src/client/row/normalization.ts`, `src/client/row/keys.ts`, and `src/client/row/state.ts`
+7. `src/client/row/interpreters.ts` and `src/client/row/codec.ts`
+8. `src/client/sync-session.ts`
+9. `src/client/replica-view.ts`
+10. `src/client/database.ts`
+11. `src/client/client.ts`
+12. `src/client/transport.ts`, `src/react`, and `src/next`
+
+`src/client/row.ts` is the public row-runtime barrel. `src/client/row/operations.ts` is a compatibility barrel for the operation helpers that previously lived together; the focused modules behind those barrels contain the implementation.
 
 The first three files define the synchronization model. Everything after them is persistence, domain adaptation, orchestration, or framework integration.
 
@@ -71,14 +75,24 @@ The store owns durability and atomicity. It does not own HTTP, UI subscriptions,
 
 ### Row semantics
 
-`src/client/row.ts` adapts schema-aware table operations into the generic protocol:
+`src/client/row.ts` exposes schema-aware table operations over the generic protocol:
 
 ```text
 putRow(table, full row)
 deleteRow(table, primary key)
 ```
 
-It validates rows and keys, encodes composite primary keys, applies operations to replica database state, and builds client and authority interpreters.
+The implementation is divided by responsibility:
+
+- `types.ts` defines row operations, replica database state, and schema-derived table types;
+- `schema.ts` validates row-replication schemas and replica schema hashes;
+- `normalization.ts` validates and canonicalizes submitted rows and primary keys;
+- `keys.ts` extracts and encodes ordered primary keys, including composite keys;
+- `state.ts` applies immutable row transitions and reads materialized rows;
+- `interpreters.ts` adapts row behavior to the replica and authority state machines;
+- `codec.ts` adapts normalized row operations to the JSON wire codec contract.
+
+The row modules do not own durability, HTTP scheduling, subscriptions, or framework lifecycle. Their internal dependency direction is one-way: types and schema validation feed normalization, key encoding, state transitions, interpreters, and codecs.
 
 ### Synchronization session
 
@@ -121,7 +135,7 @@ The facade contains row convenience methods, not persistence or synchronization 
 
 `src/client/client.ts` wires the preceding pieces together. It owns lifecycle, operation identity creation, intent hashing, concurrent-sync deduplication, and public API composition.
 
-This file should remain an orchestrator. New persistence logic belongs in a store, new synchronization-loop policy belongs in `sync-session.ts`, new observable-state behavior belongs in `replica-view.ts`, and new table behavior belongs in `database.ts` or `row.ts`.
+This file should remain an orchestrator. New persistence logic belongs in a store, new synchronization-loop policy belongs in `sync-session.ts`, new observable-state behavior belongs in `replica-view.ts`, and new table behavior belongs in `database.ts` or the focused `row/` modules.
 
 ## Local write path
 
