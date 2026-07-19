@@ -528,6 +528,7 @@ function createPendingSyncClient<
     enqueueOperation: () => reject() as Promise<never>,
     sync: reject,
     readResolutions: async () => [],
+    deleteCommittedLogPrefix: async () => 0,
     acknowledgeResolutions: async () => 0,
     close: async () => { },
   };
