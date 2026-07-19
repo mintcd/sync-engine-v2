@@ -1,5 +1,6 @@
 import path from "node:path";
 
+import { runNextBootstrapCommand } from "./bootstrap";
 import { generateNextFiles } from "./generate";
 import { writeGeneratedFile } from "./files";
 import { loadNextSyncConfig, normalizeNextSyncConfig } from "./config";
@@ -12,6 +13,7 @@ import {
 
 const USAGE = `Usage:
   sync-engine next <config-path> [--check] [--force]
+  sync-engine next bootstrap <config-path> --stream-id <id> [options]
 
 Options:
   --check   Verify generated files are current without writing.
@@ -24,6 +26,11 @@ export async function main(
 ): Promise<void> {
   if (args.length === 0 || args.includes("--help") || args.includes("-h")) {
     process.stdout.write(USAGE);
+    return;
+  }
+
+  if (args[0] === "bootstrap") {
+    await runNextBootstrapCommand(args.slice(1));
     return;
   }
 

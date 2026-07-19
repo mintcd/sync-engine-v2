@@ -16,6 +16,17 @@ import test from "node:test";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const cli = resolve(root, "bin/sync-engine");
 
+test("next CLI documents bootstrap command", () => {
+  const result = spawnSync(process.execPath, [cli, "next", "--help"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /sync-engine next bootstrap/);
+  assert.match(result.stdout, /--stream-id/);
+  assert.match(result.stdout, /--include-table/);
+});
+
 test("next CLI generates config, pull/push routes, and service worker", () => {
   const project = mkdtempSync(join(tmpdir(), "sync-engine-next-cli-"));
   try {

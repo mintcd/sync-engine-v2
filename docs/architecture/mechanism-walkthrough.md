@@ -1,6 +1,6 @@
 # Mechanism Walkthrough
 
-This guide follows concrete operations through `sync-engine-v2`. It complements
+This guide follows concrete operations through `sync-engine`. It complements
 the formal model in [Architecture](README.md), the code-oriented map in
 [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md), and the accepted decisions in
 [`decisions/`](decisions/).
@@ -782,15 +782,15 @@ transport types may repeat `RowOperation` twice.
 
 These layers are related, but they are not interchangeable.
 
-| Layer | Responsibility | Source-of-truth status |
-|---|---|---|
-| D1 internal sync tables | canonical stream head, decisions, log, materialized authority state | canonical server authority |
-| Application D1 tables | optional projection of accepted row operations | derived view, not replay authority |
-| IndexedDB replica record | confirmed prefix, outbox, client sequence allocator, resolutions | durable local replica truth |
-| `ReplicaView` | immutable cached optimistic state and observable status | in-memory projection of IndexedDB |
-| `SyncDatabase` | typed `db.table(...)` convenience API | no independent state |
-| `SyncClient` | operation identity, hashing, lifecycle, sync deduplication, composition | coordinator, not storage |
-| React hooks | construction, subscription, scheduling, rendering | presentation and lifecycle |
+| Layer                    | Responsibility                                                          | Source-of-truth status             |
+| ------------------------ | ----------------------------------------------------------------------- | ---------------------------------- |
+| D1 internal sync tables  | canonical stream head, decisions, log, materialized authority state     | canonical server authority         |
+| Application D1 tables    | optional projection of accepted row operations                          | derived view, not replay authority |
+| IndexedDB replica record | confirmed prefix, outbox, client sequence allocator, resolutions        | durable local replica truth        |
+| `ReplicaView`            | immutable cached optimistic state and observable status                 | in-memory projection of IndexedDB  |
+| `SyncDatabase`           | typed `db.table(...)` convenience API                                   | no independent state               |
+| `SyncClient`             | operation identity, hashing, lifecycle, sync deduplication, composition | coordinator, not storage           |
+| React hooks              | construction, subscription, scheduling, rendering                       | presentation and lifecycle         |
 
 A compact translation is:
 
@@ -900,9 +900,9 @@ When enabled and present in generated config, the hook:
 
 1. registers the configured service worker;
 2. tells an active worker to register synchronization support;
-3. listens for `sync-engine-v2:background-sync` messages;
+3. listens for `sync-engine:background-sync` messages;
 4. calls `client.sync()` for matching streams;
-5. posts `sync-engine-v2:mutation` when a new pending proposal is observed.
+5. posts `sync-engine:mutation` when a new pending proposal is observed.
 
 If no active, waiting, installing, or controlling worker is available when a
 mutation appears, the hook falls back to `client.sync()` directly.
@@ -1079,20 +1079,20 @@ duplicate delivery safe.
 
 ## 14. Where a change belongs
 
-| Change | Primary location |
-|---|---|
+| Change                                         | Primary location                 |
+| ---------------------------------------------- | -------------------------------- |
 | request, response, identity, or envelope shape | `src/protocol.ts`, `src/wire.ts` |
-| client enqueue, merge, or optimistic semantics | `src/replica.ts` |
-| reference authority decision behavior | `src/server.ts` |
-| durable browser transaction boundary | `src/indexeddb/` |
-| row validation or primary-key behavior | `src/client/row/` |
-| one synchronization drain loop | `src/client/sync-session.ts` |
-| observable counts, phase, or snapshots | `src/client/replica-view.ts` |
-| typed table convenience API | `src/client/database.ts` |
-| client lifecycle and component composition | `src/client/client.ts` |
-| HTTP endpoint selection and codecs | `src/client/transport.ts` |
-| React opening, reconnect, or worker scheduling | `src/react/` |
-| route adaptation and D1 authority persistence | `src/next/` |
+| client enqueue, merge, or optimistic semantics | `src/replica.ts`                 |
+| reference authority decision behavior          | `src/server.ts`                  |
+| durable browser transaction boundary           | `src/indexeddb/`                 |
+| row validation or primary-key behavior         | `src/client/row/`                |
+| one synchronization drain loop                 | `src/client/sync-session.ts`     |
+| observable counts, phase, or snapshots         | `src/client/replica-view.ts`     |
+| typed table convenience API                    | `src/client/database.ts`         |
+| client lifecycle and component composition     | `src/client/client.ts`           |
+| HTTP endpoint selection and codecs             | `src/client/transport.ts`        |
+| React opening, reconnect, or worker scheduling | `src/react/`                     |
+| route adaptation and D1 authority persistence  | `src/next/`                      |
 
 When a proposed change spans many rows in this table, first check whether it is
 actually several changes wearing one trench coat.

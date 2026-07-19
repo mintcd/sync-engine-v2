@@ -6,7 +6,7 @@ export const INDEXED_DB_REPLICA_SCHEMA_VERSION = 1 as const;
 
 /** Default database name used when an application does not provide one. */
 export const DEFAULT_INDEXED_DB_REPLICA_DATABASE_NAME =
-  "@mintcd/sync-engine-v2";
+  "@mintcd/sync-engine";
 
 /** The single object store used by the snapshot-based replica adapter. */
 export const INDEXED_DB_REPLICA_STORE_NAME = "replicas";

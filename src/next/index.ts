@@ -9,6 +9,7 @@ import type { NextSyncServer } from "./types";
 
 export * from "./server";
 export * from "./d1";
+export * from "./d1-bootstrap";
 export {
   createD1LogSyncAuthority,
   createD1RowSyncAuthority,

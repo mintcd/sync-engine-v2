@@ -6,6 +6,7 @@ const USAGE = `Usage:
   sync-engine schema check [options]
   sync-engine schema inspect [options]
   sync-engine next <config-path> [--check] [--force]
+  sync-engine next bootstrap <config-path> --stream-id <id> [options]
 
 Options:
   --config <path>          Wrangler config path. Wrangler searches upward if omitted.
@@ -19,6 +20,10 @@ Options:
   --remote-bindings        Allow bindings configured with "remote": true.
   --persist-to <path>      Wrangler-compatible local persistence root.
   --no-persist             Use an ephemeral local binding store.
+  --stream-id <id>         Stream history to seed with next bootstrap.
+  --include-table <names>  Tables to import with next bootstrap. May be repeated.
+  --table-prefix <prefix>  D1 sync table prefix for next bootstrap.
+  --batch-size <n>         Rows proposed per next bootstrap commit.
   -h, --help               Show this help.
 
 Generation is local-only by default. Apply migrations to the local D1 database first.

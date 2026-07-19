@@ -1,6 +1,6 @@
 # Architecture
 
-`sync-engine-v2` is one synchronization protocol with several adapters around it. The easiest way to understand the repository is to follow the dependency direction from the generic protocol core toward product-facing integrations.
+`sync-engine` is one synchronization protocol with several adapters around it. The easiest way to understand the repository is to follow the dependency direction from the generic protocol core toward product-facing integrations.
 
 ```text
 application and React hooks

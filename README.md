@@ -427,6 +427,20 @@ accepted `putRow` and `deleteRow` operations are written to the corresponding
 application table in the same D1 batch as the sync commit. The internal sync
 tables remain the authority for replay and idempotency.
 
+To seed a new v2 sync history from rows that already exist in the configured D1
+application tables, run the Next bootstrap command before clients start syncing:
+
+```bash
+npx sync-engine next bootstrap ./sync.next.config.json \
+  --stream-id "account/user-1" \
+  --table-prefix sync_engine_v2
+```
+
+The command discovers the same tables as `sync-engine next`, creates the v2 sync
+tables if needed, and appends accepted `putRow` operations for the current rows
+in primary-key order. The target stream must have an empty sync history. If your
+server uses a custom D1 `tablePrefix`, pass the same value here.
+
 ## Development
 
 ```bash
