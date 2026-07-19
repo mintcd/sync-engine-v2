@@ -1,16 +1,16 @@
 {
-  "name": "@mintcd/sync-engine-v2",
-  "version": "0.1.0-alpha.0",
+  "name": "@mintcd/sync-engine",
+  "version": "1.0.0",
   "description": "A correctness-first core for replicating a canonical operation log.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mintcd/sync-engine-v2.git"
+    "url": "git+https://github.com/mintcd/sync-engine.git"
   },
   "bugs": {
-    "url": "https://github.com/mintcd/sync-engine-v2/issues"
+    "url": "https://github.com/mintcd/sync-engine/issues"
   },
-  "homepage": "https://github.com/mintcd/sync-engine-v2#readme",
+  "homepage": "https://github.com/mintcd/sync-engine#readme",
   "keywords": [
     "sync",
     "replication",
@@ -22,7 +22,7 @@
   "type": "module",
   "sideEffects": false,
   "bin": {
-    "sync-engine-v2": "bin/sync-engine-v2"
+    "sync-engine": "bin/sync-engine"
   },
   "exports": {
     ".": {
@@ -68,7 +68,7 @@
     "dev": "npm run dev:example",
     "dev:example": "npm run sync:next:example && cd examples/next-d1-notes && vinext dev --port 3000",
     "sync:next": "npm run sync:next:example",
-    "sync:next:example": "npm run build && node bin/sync-engine-v2 next examples/next-d1-notes/sync.next.config.json --force",
+    "sync:next:example": "npm run build && node bin/sync-engine next examples/next-d1-notes/sync.next.config.json --force",
     "build": "node scripts/build.mjs && tsc -p tsconfig.json --emitDeclarationOnly --noEmit false",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test test/*.test.js e2e/*.test.js",

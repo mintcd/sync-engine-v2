@@ -57,7 +57,7 @@ test(
       await page.goto(appUrl("browser:e2e:first"));
       await expect(
         page.getByRole("heading", {
-          name: "sync-engine-v2 remote D1 row sync",
+          name: "sync-engine remote D1 row sync",
         }),
       ).toBeVisible();
       await expect(page.getByTestId("service-worker-error")).toHaveText("");

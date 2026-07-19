@@ -29,7 +29,7 @@ await build({
   platform: "node",
   target: "node20",
   external: ["esbuild"],
-  outfile: "bin/sync-engine-v2",
+  outfile: "bin/sync-engine",
   banner: {
     js: "#!/usr/bin/env node",
   },

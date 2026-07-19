@@ -21,7 +21,7 @@ npm install --save-dev wrangler
 Apply the application's migrations, then generate the contract:
 
 ```bash
-npx sync-engine-v2 schema generate \
+npx sync-engine schema generate \
   --config ./wrangler.jsonc \
   --binding DB \
   --include notes,projects \
@@ -35,7 +35,7 @@ Add a CI check so schema changes cannot quietly leave generated client code
 behind:
 
 ```bash
-npx sync-engine-v2 schema check \
+npx sync-engine schema check \
   --config ./wrangler.jsonc \
   --binding DB \
   --include notes,projects \
@@ -45,7 +45,7 @@ npx sync-engine-v2 schema check \
 To inspect the normalized contract without writing a file:
 
 ```bash
-npx sync-engine-v2 schema inspect --config ./wrangler.jsonc --binding DB
+npx sync-engine schema inspect --config ./wrangler.jsonc --binding DB
 ```
 
 Schema discovery is local by default even when Wrangler supports remote
@@ -53,7 +53,7 @@ bindings. To use bindings marked with `"remote": true` in the Wrangler config,
 pass `--remote-bindings` explicitly:
 
 ```bash
-npx sync-engine-v2 schema check \
+npx sync-engine schema check \
   --config ./wrangler.jsonc \
   --binding DB \
   --include notes,projects \
@@ -70,8 +70,8 @@ A generated module contains only a schema contract and derived storage-level
 TypeScript types:
 
 ```ts
-import { defineReplicaSchema } from "@mintcd/sync-engine-v2/schema";
-import type { InferDatabase } from "@mintcd/sync-engine-v2/schema";
+import { defineReplicaSchema } from "@mintcd/sync-engine/schema";
+import type { InferDatabase } from "@mintcd/sync-engine/schema";
 
 export const replicaSchema = defineReplicaSchema({
   formatVersion: 1,
@@ -142,12 +142,12 @@ Generation requires an explicit exposure decision. Use repeatable or comma-separ
 the browser contract:
 
 ```bash
-npx sync-engine-v2 schema generate \
+npx sync-engine schema generate \
   --include notes,projects \
   --exclude audit_log
 
 # Deliberately expose every application table:
-npx sync-engine-v2 schema generate --all
+npx sync-engine schema generate --all
 ```
 
 Cloudflare and SQLite internal tables, D1 migration metadata, and tables prefixed

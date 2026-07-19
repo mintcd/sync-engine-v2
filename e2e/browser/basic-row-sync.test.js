@@ -54,16 +54,16 @@ test(
       await page.goto(baseUrl);
       await expect(
         page.getByRole("heading", {
-          name: "sync-engine-v2 basic row sync",
+          name: "sync-engine basic row sync",
         }),
       ).toBeVisible();
       await expect(page.getByTestId("service-worker-error")).toHaveText("");
 
       const serviceWorker = await page.request.get(
-        `${baseUrl}/sync-engine-v2.sw.js`,
+        `${baseUrl}/sync-engine.sw.js`,
       );
       assert.equal(serviceWorker.status(), 200);
-      assert.match(await serviceWorker.text(), /sync-engine-v2:request/);
+      assert.match(await serviceWorker.text(), /sync-engine:request/);
 
       await page.getByLabel("title").fill("Browser");
       await page.getByRole("button", { name: "Save" }).click();

@@ -6,10 +6,12 @@
     "persistTo": false
   },
   "schema": {
-    "include": ["notes"]
+    "include": [
+      "notes"
+    ]
   },
   "client": {
-    "databaseName": "sync-engine-v2-remote-d1-row-sync"
+    "databaseName": "sync-engine-remote-d1-row-sync"
   },
   "server": {
     "module": "./src/sync/server.ts",
@@ -21,7 +23,7 @@
   },
   "output": {
     "config": "./src/sync/sync.generated.ts",
-    "serviceWorker": "./public/sync-engine-v2.sw.js"
+    "serviceWorker": "./public/sync-engine.sw.js"
   },
   "serviceWorker": {
     "syncTag": "remote-d1-row-sync"

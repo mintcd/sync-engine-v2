@@ -4,17 +4,17 @@ import {
   d1SyncTableNames,
   defineNextSyncServer,
   initializeD1SyncTables,
-} from "@mintcd/sync-engine-v2/next";
+} from "@mintcd/sync-engine/next";
 import type {
   D1DatabaseLike,
   D1PreparedStatementLike,
   D1Value,
   SyncRouteAuthority,
-} from "@mintcd/sync-engine-v2/next";
+} from "@mintcd/sync-engine/next";
 import type {
   RowOperation,
   RowRejection,
-} from "@mintcd/sync-engine-v2/client";
+} from "@mintcd/sync-engine/client";
 import { replicaSchema } from "./sync.generated";
 
 type RowAuthority = SyncRouteAuthority<

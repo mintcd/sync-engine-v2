@@ -14,7 +14,7 @@ import { dirname } from "node:path";
 import test from "node:test";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const cli = resolve(root, "bin/sync-engine-v2");
+const cli = resolve(root, "bin/sync-engine");
 
 test("next CLI generates config, pull/push routes, and service worker", () => {
   const project = mkdtempSync(join(tmpdir(), "sync-engine-next-cli-"));
@@ -84,7 +84,7 @@ export async function getPlatformProxy(options) {
         routes: { appDir: "./app", basePath: "/api/sync" },
         output: {
           config: "./src/sync/sync.generated.ts",
-          serviceWorker: "./public/sync-engine-v2.sw.js",
+          serviceWorker: "./public/sync-engine.sw.js",
         },
         serviceWorker: { syncTag: "notes-sync" },
       }),
@@ -107,7 +107,7 @@ export async function getPlatformProxy(options) {
     assert.match(generatedConfig, /"databaseName": "notes-local"/);
     assert.match(generatedConfig, /"pull": "\/api\/sync\/pull"/);
     assert.match(generatedConfig, /"push": "\/api\/sync\/push"/);
-    assert.match(generatedConfig, /"url": "\/sync-engine-v2\.sw\.js"/);
+    assert.match(generatedConfig, /"url": "\/sync-engine\.sw\.js"/);
     assert.doesNotMatch(generatedConfig, /server\.ts|binding|DB/);
 
     const pullRoute = readFileSync(
@@ -126,12 +126,12 @@ export async function getPlatformProxy(options) {
     assert.match(pushRoute, /syncServer\.push\(request\)/);
 
     const serviceWorker = readFileSync(
-      join(project, "public", "sync-engine-v2.sw.js"),
+      join(project, "public", "sync-engine.sw.js"),
       "utf8",
     );
-    assert.match(serviceWorker, /sync-engine-v2:request/);
-    assert.match(serviceWorker, /sync-engine-v2:mutation/);
-    assert.match(serviceWorker, /sync-engine-v2:background-sync/);
+    assert.match(serviceWorker, /sync-engine:request/);
+    assert.match(serviceWorker, /sync-engine:mutation/);
+    assert.match(serviceWorker, /sync-engine:background-sync/);
     assert.match(serviceWorker, /"syncTag": "notes-sync"/);
     assert.doesNotMatch(serviceWorker, /interface SyncEngineServiceWorker/);
 

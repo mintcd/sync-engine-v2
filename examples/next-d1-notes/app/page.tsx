@@ -6,10 +6,10 @@ import {
 import type { FormEvent } from "react";
 import {
   useSyncEngine,
-} from "@mintcd/sync-engine-v2/client/react";
+} from "@mintcd/sync-engine/client/react";
 import {
   deleteIndexedDbReplicaDatabase,
-} from "@mintcd/sync-engine-v2/indexeddb";
+} from "@mintcd/sync-engine/indexeddb";
 import { finalConfig } from "./sync/sync.generated";
 
 function browserValue(name: string, fallback: string) {
@@ -128,7 +128,7 @@ export default function Page() {
       <header className="hero">
         <div>
           <p className="eyebrow">Manual test bench</p>
-          <h1>sync-engine-v2 toy sync</h1>
+          <h1>sync-engine toy sync</h1>
           <p className="lede">
             Notes are written to IndexedDB first, rendered from optimistic row
             state, and synchronized through generated protocol-v1 routes.

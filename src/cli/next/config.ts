@@ -49,7 +49,7 @@ interface ConfigModule {
   readonly default?: unknown;
 }
 
-const CONFIG_HELPER_NAMESPACE = "sync-engine-v2-next-config-helper";
+const CONFIG_HELPER_NAMESPACE = "sync-engine-next-config-helper";
 
 export async function loadSyncConfigObject(
   configPath: string,
@@ -88,7 +88,7 @@ export async function loadSyncConfigObject(
   } else {
     throw new Error(
       `unsupported sync config extension ${JSON.stringify(extension)}; ` +
-        "use .ts, .mts, .cts, .tsx, .js, .mjs, .cjs, or .json",
+      "use .ts, .mts, .cts, .tsx, .js, .mjs, .cjs, or .json",
     );
   }
 
@@ -168,7 +168,7 @@ export function normalizeNextSyncConfig(
 
   const databaseName =
     readOptionalString(client?.databaseName, "client.databaseName") ??
-    "sync-engine-v2-db";
+    "sync-engine-db";
   const serverModule = readString(server.module, "server.module");
   const exportName =
     readOptionalString(server.exportName, "server.exportName") ?? "default";
@@ -192,7 +192,7 @@ export function normalizeNextSyncConfig(
   const outputConfig = resolveProjectPath(
     root,
     readOptionalString(output?.config, "output.config") ??
-      defaultGeneratedConfigPath(root),
+    defaultGeneratedConfigPath(root),
   );
   const outputServiceWorker = normalizeServiceWorkerOutput(
     root,
@@ -202,14 +202,14 @@ export function normalizeNextSyncConfig(
     outputServiceWorker === undefined
       ? undefined
       : readOptionalString(serviceWorker?.url, "serviceWorker.url") ??
-        toBrowserServiceWorkerPath(root, outputServiceWorker);
+      toBrowserServiceWorkerPath(root, outputServiceWorker);
   const serviceWorkerScope = readOptionalString(
     serviceWorker?.scope,
     "serviceWorker.scope",
   );
   const syncTag =
     readOptionalString(serviceWorker?.syncTag, "serviceWorker.syncTag") ??
-    "sync-engine-v2-sync";
+    "sync-engine-sync";
 
   const generatedPaths = [
     outputConfig,
@@ -271,10 +271,10 @@ export function normalizeNextSyncConfig(
 
 function configHelperPlugin(): Plugin {
   return {
-    name: "sync-engine-v2-next-config-helper",
+    name: "sync-engine-next-config-helper",
     setup(buildContext) {
       buildContext.onResolve(
-        { filter: /^@mintcd\/sync-engine-v2\/next$/ },
+        { filter: /^@mintcd\/sync-engine\/next$/ },
         (args) => ({ path: args.path, namespace: CONFIG_HELPER_NAMESPACE }),
       );
       buildContext.onLoad(
@@ -308,7 +308,7 @@ function normalizeServiceWorkerOutput(
   return resolveProjectPath(
     projectRoot,
     value === undefined
-      ? "public/sync-engine-v2.sw.js"
+      ? "public/sync-engine.sw.js"
       : readString(value, "output.serviceWorker"),
   );
 }

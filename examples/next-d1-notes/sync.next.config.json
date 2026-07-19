@@ -6,10 +6,12 @@
     "persistTo": false
   },
   "schema": {
-    "include": ["notes"]
+    "include": [
+      "notes"
+    ]
   },
   "client": {
-    "databaseName": "sync-engine-v2-manual-row-sync"
+    "databaseName": "sync-engine-manual-row-sync"
   },
   "server": {
     "module": "./app/sync/server.ts",
@@ -21,7 +23,7 @@
   },
   "output": {
     "config": "./app/sync/sync.generated.ts",
-    "serviceWorker": "./public/sync-engine-v2.sw.js"
+    "serviceWorker": "./public/sync-engine.sw.js"
   },
   "serviceWorker": {
     "syncTag": "manual-row-sync"

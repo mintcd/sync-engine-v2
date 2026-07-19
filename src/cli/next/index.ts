@@ -11,7 +11,7 @@ import {
 } from "../../schema";
 
 const USAGE = `Usage:
-  sync-engine-v2 next <config-path> [--check] [--force]
+  sync-engine next <config-path> [--check] [--force]
 
 Options:
   --check   Verify generated files are current without writing.

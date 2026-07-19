@@ -1,4 +1,4 @@
-# sync-engine-v2
+# sync-engine
 
 A correctness-first TypeScript core for replicating a canonical, append-only operation log.
 
@@ -99,7 +99,7 @@ import {
   enqueueOperation,
   mergeSyncResponse,
   prepareSyncRequest,
-} from "@mintcd/sync-engine-v2";
+} from "@mintcd/sync-engine";
 
 type CounterState = { value: number };
 type DeltaOperation = { delta: number };
@@ -161,10 +161,10 @@ replica = mergeSyncResponse(replica, response, {
 Import the browser adapter from the dedicated subpath:
 
 ```ts
-import { createIntentHash } from "@mintcd/sync-engine-v2";
+import { createIntentHash } from "@mintcd/sync-engine";
 import {
   openIndexedDbReplicaStore,
-} from "@mintcd/sync-engine-v2/indexeddb";
+} from "@mintcd/sync-engine/indexeddb";
 
 const apply = (
   state: Record<string, unknown>,
@@ -223,7 +223,7 @@ exposes a typed `db` facade:
 ```tsx
 "use client";
 
-import { useSyncEngine } from "@mintcd/sync-engine-v2/client/react";
+import { useSyncEngine } from "@mintcd/sync-engine/client/react";
 import { finalConfig } from "./sync.generated";
 
 export function Notes() {
@@ -265,7 +265,7 @@ Non-React code can use the lower-level client directly:
 import {
   createIndexedDbSyncClient,
   createRowFetchSyncTransport,
-} from "@mintcd/sync-engine-v2/client";
+} from "@mintcd/sync-engine/client";
 import { replicaSchema } from "./sync/schema.generated";
 
 const client = await createIndexedDbSyncClient({
@@ -292,7 +292,7 @@ import {
   useSyncClient,
   useSyncEngine,
   useSyncTable,
-} from "@mintcd/sync-engine-v2/client/react";
+} from "@mintcd/sync-engine/client/react";
 ```
 
 `useSyncClient` and `useSyncTable` subscribe to an existing client instance.
@@ -305,7 +305,7 @@ The Next generator discovers a selected D1 schema and writes browser-safe client
 configuration, App Router route adapters, and a small service worker:
 
 ```bash
-npx sync-engine-v2 next ./sync.next.config.ts
+npx sync-engine next ./sync.next.config.ts
 ```
 
 By default it writes:
@@ -314,7 +314,7 @@ By default it writes:
 src/sync/sync.generated.ts
 src/app/api/sync/pull/route.ts
 src/app/api/sync/push/route.ts
-public/sync-engine-v2.sw.js
+public/sync-engine.sw.js
 ```
 
 Projects without `src/` use `sync/` and `app/` instead. The generated
@@ -324,8 +324,8 @@ Projects without `src/` use `sync/` and `app/` instead. The generated
 ```ts
 import {
   createIndexedDbSyncClientFromConfig,
-} from "@mintcd/sync-engine-v2/client";
-import { useSyncEngine } from "@mintcd/sync-engine-v2/client/react";
+} from "@mintcd/sync-engine/client";
+import { useSyncEngine } from "@mintcd/sync-engine/client/react";
 import { finalConfig } from "./sync.generated";
 ```
 
@@ -338,15 +338,15 @@ module can be a thin adapter around any authority that implements the core
 `synchronize()` transition:
 
 ```ts
-import { InMemoryLogServer } from "@mintcd/sync-engine-v2";
+import { InMemoryLogServer } from "@mintcd/sync-engine";
 import {
   createInitialDatabaseState,
   createRowLogInterpreter,
-} from "@mintcd/sync-engine-v2/client";
+} from "@mintcd/sync-engine/client";
 import {
   createRowSyncRouteServer,
   defineNextSyncServer,
-} from "@mintcd/sync-engine-v2/next";
+} from "@mintcd/sync-engine/next";
 import { replicaSchema } from "./sync.generated";
 
 const authority = new InMemoryLogServer({
@@ -378,8 +378,8 @@ import {
   createD1RowSyncAuthority,
   createRowSyncRouteServer,
   defineNextSyncServer,
-} from "@mintcd/sync-engine-v2/next";
-import type { D1DatabaseLike } from "@mintcd/sync-engine-v2/next";
+} from "@mintcd/sync-engine/next";
+import type { D1DatabaseLike } from "@mintcd/sync-engine/next";
 import { replicaSchema } from "./sync.generated";
 
 const platform = await getPlatformProxy({

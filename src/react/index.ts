@@ -162,9 +162,9 @@ export interface UseSyncEngineResult<
   Schema extends ReplicaSchemaContract,
   Rejection,
 > extends Omit<
-    UseSyncClientResult<Schema, Rejection>,
-    "client" | "phase" | "sync"
-  > {
+  UseSyncClientResult<Schema, Rejection>,
+  "client" | "phase" | "sync"
+> {
   readonly phase: SyncEnginePhase;
   readonly ready: boolean;
   readonly client: SyncClient<Schema, Rejection> | undefined;
@@ -403,7 +403,7 @@ export function useSyncServiceWorker<
           return;
         }
         registration.active?.postMessage({
-          type: "sync-engine-v2:register-sync",
+          type: "sync-engine:register-sync",
         });
       })
       .catch((error: unknown) => onErrorRef.current?.(error));
@@ -440,7 +440,7 @@ export function useSyncServiceWorker<
         data !== null &&
         typeof data === "object" &&
         (data as { type?: unknown }).type ===
-          "sync-engine-v2:background-sync"
+        "sync-engine:background-sync"
       ) {
         const streamId = (data as { streamId?: unknown }).streamId;
         if (streamId !== undefined && streamId !== client.streamId) {
@@ -485,7 +485,7 @@ export function useSyncServiceWorker<
       registrationRef.current?.installing;
     if (target !== null && target !== undefined) {
       target.postMessage({
-        type: "sync-engine-v2:mutation",
+        type: "sync-engine:mutation",
         streamId: client.streamId,
       });
       return;
@@ -523,13 +523,13 @@ function createPendingSyncClient<
     clientId: clientId ?? "pending",
     db,
     getSnapshot: () => snapshot,
-    subscribe: () => () => {},
+    subscribe: () => () => { },
     table: db.table,
     enqueueOperation: () => reject() as Promise<never>,
     sync: reject,
     readResolutions: async () => [],
     acknowledgeResolutions: async () => 0,
-    close: async () => {},
+    close: async () => { },
   };
 }
 

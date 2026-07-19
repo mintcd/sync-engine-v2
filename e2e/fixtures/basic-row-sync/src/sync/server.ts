@@ -1,18 +1,18 @@
-import { InMemoryLogServer } from "@mintcd/sync-engine-v2";
+import { InMemoryLogServer } from "@mintcd/sync-engine";
 import {
   createInitialDatabaseState,
   createRowLogInterpreter,
-} from "@mintcd/sync-engine-v2/client";
+} from "@mintcd/sync-engine/client";
 import type {
   ReplicaDatabaseState,
   RowOperation,
   RowRejection,
-} from "@mintcd/sync-engine-v2/client";
+} from "@mintcd/sync-engine/client";
 import {
   createRowSyncRouteServer,
   defineNextSyncServer,
-} from "@mintcd/sync-engine-v2/next";
-import type { SyncRouteAuthority } from "@mintcd/sync-engine-v2/next";
+} from "@mintcd/sync-engine/next";
+import type { SyncRouteAuthority } from "@mintcd/sync-engine/next";
 import { replicaSchema } from "./sync.generated";
 
 type RowAuthority = SyncRouteAuthority<

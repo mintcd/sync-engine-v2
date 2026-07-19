@@ -6,7 +6,7 @@ import {
 import type { FormEvent } from "react";
 import {
   useSyncEngine,
-} from "@mintcd/sync-engine-v2/client/react";
+} from "@mintcd/sync-engine/client/react";
 import { finalConfig } from "../src/sync/sync.generated";
 import styles from "./toy-components.module.css";
 

@@ -24,7 +24,7 @@ import {
 
 test("basic row-sync fixture generates routes and syncs through them", async () => {
   const project = createBasicRowSyncProject("e2e");
-  const databaseName = "sync-engine-v2-basic-row-sync";
+  const databaseName = "sync-engine-basic-row-sync";
 
   try {
     const generated = spawnSync(
@@ -150,17 +150,17 @@ async function importGeneratedRouteHarness(project) {
 
 function syncEnginePackagePlugin() {
   const targets = new Map([
-    ["@mintcd/sync-engine-v2", join(root, "dist", "index.js")],
-    ["@mintcd/sync-engine-v2/client", join(root, "dist", "client", "index.js")],
-    ["@mintcd/sync-engine-v2/next", join(root, "dist", "next", "index.js")],
-    ["@mintcd/sync-engine-v2/schema", join(root, "dist", "schema", "index.js")],
+    ["@mintcd/sync-engine", join(root, "dist", "index.js")],
+    ["@mintcd/sync-engine/client", join(root, "dist", "client", "index.js")],
+    ["@mintcd/sync-engine/next", join(root, "dist", "next", "index.js")],
+    ["@mintcd/sync-engine/schema", join(root, "dist", "schema", "index.js")],
   ]);
 
   return {
-    name: "sync-engine-v2-package",
+    name: "sync-engine-package",
     setup(buildContext) {
       buildContext.onResolve(
-        { filter: /^@mintcd\/sync-engine-v2(?:\/(?:client|next|schema))?$/ },
+        { filter: /^@mintcd\/sync-engine(?:\/(?:client|next|schema))?$/ },
         (args) => {
           const target = targets.get(args.path);
           if (target === undefined) {

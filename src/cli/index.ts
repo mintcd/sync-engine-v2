@@ -2,10 +2,10 @@ import { runSchemaCommand } from "./schema";
 import { main as nextMain } from "./next/index";
 
 const USAGE = `Usage:
-  sync-engine-v2 schema generate [options]
-  sync-engine-v2 schema check [options]
-  sync-engine-v2 schema inspect [options]
-  sync-engine-v2 next <config-path> [--check] [--force]
+  sync-engine schema generate [options]
+  sync-engine schema check [options]
+  sync-engine schema inspect [options]
+  sync-engine next <config-path> [--check] [--force]
 
 Options:
   --config <path>          Wrangler config path. Wrangler searches upward if omitted.

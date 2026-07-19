@@ -11,9 +11,9 @@ import {
 import { suppressSuccessfulWorkerdSocketNoise } from "./workerd-noise";
 
 export const SCHEMA_USAGE = `Usage:
-  sync-engine-v2 schema generate [options]
-  sync-engine-v2 schema check [options]
-  sync-engine-v2 schema inspect [options]
+  sync-engine schema generate [options]
+  sync-engine schema check [options]
+  sync-engine schema inspect [options]
 
 Options:
   --config <path>          Wrangler config path. Wrangler searches upward if omitted.

@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
-export const cli = resolve(root, "bin/sync-engine-v2");
+export const cli = resolve(root, "bin/sync-engine");
 export const fixtureRoot = resolve(root, "e2e", "fixtures", "basic-row-sync");
 export const remoteD1FixtureRoot = resolve(
   root,
@@ -103,7 +103,7 @@ export function installBuiltSyncEnginePackage(project) {
     project,
     "node_modules",
     "@mintcd",
-    "sync-engine-v2",
+    "sync-engine",
   );
   mkdirSync(packageDirectory, { recursive: true });
   cpSync(join(root, "dist"), join(packageDirectory, "dist"), {
@@ -138,7 +138,7 @@ export function removeGeneratedProject(project) {
   } catch (error) {
     process.stderr.write(
       `warning: failed to remove generated fixture ${project}: ` +
-        `${error instanceof Error ? error.message : String(error)}\n`,
+      `${error instanceof Error ? error.message : String(error)}\n`,
     );
   }
 }
