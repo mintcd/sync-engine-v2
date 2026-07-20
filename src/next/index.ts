@@ -11,6 +11,7 @@ export * from "./server";
 export * from "./d1";
 export * from "./d1-bootstrap";
 export {
+  D1ApplicationProjectionError,
   createD1LogSyncAuthority,
   createD1RowSyncAuthority,
 } from "./d1-correctness";
