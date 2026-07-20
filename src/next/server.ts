@@ -217,11 +217,18 @@ async function readRequestJson(
     throw new Error("maximumRequestBytes must be a positive safe integer");
   }
 
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > maximumRequestBytes) {
-    throw new SyncRouteRequestError("sync request body is too large", 413);
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength !== null && /^\d+$/.test(declaredLength)) {
+    const parsedLength = Number(declaredLength);
+    if (
+      !Number.isSafeInteger(parsedLength) ||
+      parsedLength > maximumRequestBytes
+    ) {
+      throw requestTooLargeError();
+    }
   }
 
+  const text = await readRequestText(request, maximumRequestBytes);
   try {
     return text === "" ? null : JSON.parse(text);
   } catch (error) {
@@ -229,6 +236,49 @@ async function readRequestJson(
       cause: error instanceof Error ? error : undefined,
     });
   }
+}
+
+async function readRequestText(
+  request: Request,
+  maximumRequestBytes: number,
+): Promise<string> {
+  const body = request.body;
+  if (body === null) {
+    return "";
+  }
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let byteLength = 0;
+  let text = "";
+
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        break;
+      }
+
+      byteLength += chunk.value.byteLength;
+      if (byteLength > maximumRequestBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // Preserve the deterministic request-size error.
+        }
+        throw requestTooLargeError();
+      }
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function requestTooLargeError(): SyncRouteRequestError {
+  return new SyncRouteRequestError("sync request body is too large", 413);
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -245,7 +295,11 @@ function errorResponse(error: unknown): Response {
   const body: SyncRouteErrorBody = {
     code: codeForError(error, status),
     message:
-      error instanceof Error ? error.message : "sync route request failed",
+      status >= 500
+        ? "internal sync error"
+        : error instanceof Error
+          ? error.message
+          : "sync route request failed",
   };
   return jsonResponse(body, status);
 }
