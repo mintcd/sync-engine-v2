@@ -144,7 +144,7 @@ export async function createSyncClient<
       intentHash: await createIntentHash(normalized),
       intent: normalized,
     });
-    await view.refresh({ phase: "idle", error: undefined });
+    await view.refresh();
     return proposal;
   }
 
