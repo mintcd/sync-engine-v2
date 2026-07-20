@@ -60,6 +60,16 @@ export interface InMemoryLogServerOptions<State, Intent, Operation, Rejection> {
   readonly snapshot?: LogServerSnapshot<State, Operation, Rejection>;
 }
 
+interface StagedServerTransition<State, Operation, Rejection> {
+  state: State;
+  readonly entries: CommittedOperation<Operation>[];
+  readonly decisionsByOperationId: Map<
+    string,
+    StoredProposalDecision<Operation, Rejection>
+  >;
+  readonly operationIdByClientPosition: Map<string, string>;
+}
+
 function clientPositionKey(identity: OperationIdentity): string {
   return `${identity.clientId}\u0000${identity.clientSequence}`;
 }
@@ -152,26 +162,46 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
       );
     }
 
+    const staged: StagedServerTransition<State, Operation, Rejection> = {
+      state: this.#state,
+      entries: [],
+      decisionsByOperationId: new Map(),
+      operationIdByClientPosition: new Map(),
+    };
     const decisions = request.proposals.map((proposal) =>
-      this.#processProposal(proposal),
+      this.#processProposal(proposal, staged),
     );
-
+    const nextLog = [...this.#log, ...staged.entries];
+    const nextHeadSequence = nextLog.length;
     const pageSize = Math.min(
       request.maximumEntries,
       this.#limits.maximumEntriesPerResponse,
     );
-    const entries = this.#log.slice(
+    const entries = nextLog.slice(
       request.baseSequence,
       request.baseSequence + pageSize,
     );
     const response: SyncResponse<Operation, Rejection> = {
       requestedBaseSequence: request.baseSequence,
       throughSequence: request.baseSequence + entries.length,
-      headSequence: this.headSequence,
+      headSequence: nextHeadSequence,
       entries,
       decisions,
     };
     assertSyncResponse(response, this.#limits);
+
+    // Publish the staged transition only after every proposal and the resulting
+    // response have been validated. Unexpected interpreter failures therefore
+    // leave the request with no partial decisions, appends, or state changes.
+    this.#state = staged.state;
+    this.#log.push(...staged.entries);
+    for (const [operationId, record] of staged.decisionsByOperationId) {
+      this.#decisionsByOperationId.set(operationId, record);
+    }
+    for (const [positionKey, operationId] of staged.operationIdByClientPosition) {
+      this.#operationIdByClientPosition.set(positionKey, operationId);
+    }
+
     return response;
   }
 
@@ -185,10 +215,11 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
 
   #processProposal(
     proposal: ProposedOperation<Intent>,
+    staged: StagedServerTransition<State, Operation, Rejection>,
   ): ProposalDecision<Operation, Rejection> {
-    const existingByOperationId = this.#decisionsByOperationId.get(
-      proposal.operationId,
-    );
+    const existingByOperationId =
+      staged.decisionsByOperationId.get(proposal.operationId) ??
+      this.#decisionsByOperationId.get(proposal.operationId);
 
     if (existingByOperationId !== undefined) {
       if (!sameOperationIdentity(existingByOperationId.identity, proposal)) {
@@ -201,7 +232,9 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
     }
 
     const positionKey = clientPositionKey(proposal);
-    const existingOperationId = this.#operationIdByClientPosition.get(positionKey);
+    const existingOperationId =
+      staged.operationIdByClientPosition.get(positionKey) ??
+      this.#operationIdByClientPosition.get(positionKey);
     if (
       existingOperationId !== undefined &&
       existingOperationId !== proposal.operationId
@@ -214,7 +247,7 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
       );
     }
 
-    const draft = this.#interpreter.decide(this.#state, proposal);
+    const draft = this.#interpreter.decide(staged.state, proposal);
 
     if (draft.status === "rejected") {
       const decision: ProposalDecision<Operation, Rejection> = {
@@ -222,11 +255,11 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
         status: "rejected",
         reason: draft.reason,
       };
-      this.#storeDecision(proposal, decision);
+      this.#stageDecision(staged, proposal, decision);
       return decision;
     }
 
-    const sequence = this.headSequence + 1;
+    const sequence = this.#log.length + staged.entries.length + 1;
     const entry: CommittedOperation<Operation> = {
       sequence,
       operationId: proposal.operationId,
@@ -238,8 +271,8 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
       operation: draft.operation,
     };
 
-    // Compute before mutating indexes so a throwing interpreter leaves no trace.
-    const nextState = this.#interpreter.apply(this.#state, draft.operation);
+    // Compute before staging indexes so a throwing interpreter leaves no trace.
+    const nextState = this.#interpreter.apply(staged.state, draft.operation);
     const decision: ProposalDecision<Operation, Rejection> = {
       operationId: proposal.operationId,
       status: "accepted",
@@ -247,17 +280,30 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
       operation: draft.operation,
     };
 
-    this.#state = nextState;
-    this.#log.push(entry);
-    this.#storeDecision(proposal, decision);
+    staged.state = nextState;
+    staged.entries.push(entry);
+    this.#stageDecision(staged, proposal, decision);
     return decision;
   }
 
-  #storeDecision(
+  #stageDecision(
+    staged: StagedServerTransition<State, Operation, Rejection>,
     identity: OperationSubmissionIdentity,
     decision: ProposalDecision<Operation, Rejection>,
   ): void {
-    const record: StoredProposalDecision<Operation, Rejection> = {
+    const record = this.#createStoredDecision(identity, decision);
+    staged.decisionsByOperationId.set(identity.operationId, record);
+    staged.operationIdByClientPosition.set(
+      clientPositionKey(identity),
+      identity.operationId,
+    );
+  }
+
+  #createStoredDecision(
+    identity: OperationSubmissionIdentity,
+    decision: ProposalDecision<Operation, Rejection>,
+  ): StoredProposalDecision<Operation, Rejection> {
+    return {
       identity: {
         operationId: identity.operationId,
         clientId: identity.clientId,
@@ -266,12 +312,6 @@ export class InMemoryLogServer<State, Intent, Operation, Rejection> {
       },
       decision,
     };
-
-    this.#decisionsByOperationId.set(identity.operationId, record);
-    this.#operationIdByClientPosition.set(
-      clientPositionKey(identity),
-      identity.operationId,
-    );
   }
 
   #restoreDecision(
