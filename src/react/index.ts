@@ -27,6 +27,7 @@ import type { JsonValue } from "../wire";
 
 export interface UseSyncClientOptions {
   readonly initialSync?: boolean;
+  readonly syncOnMutation?: boolean;
   readonly syncOnReconnect?: boolean;
   readonly onSyncError?: (error: unknown) => void;
 }
@@ -61,16 +62,19 @@ export function useSyncClient<
 ): UseSyncClientResult<Schema, Rejection> {
   const {
     initialSync = true,
+    syncOnMutation = false,
     syncOnReconnect = true,
     onSyncError,
   } = options;
   const snapshot = useSyncSnapshot(client);
   const initialSyncStarted = useRef(false);
+  const mutationSyncRevision = useRef(-1);
   const previousClient = useRef(client);
 
   if (previousClient.current !== client) {
     previousClient.current = client;
     initialSyncStarted.current = false;
+    mutationSyncRevision.current = -1;
   }
 
   useEffect(() => {
@@ -96,6 +100,23 @@ export function useSyncClient<
     window.addEventListener("online", onOnline);
     return () => window.removeEventListener("online", onOnline);
   }, [client, onSyncError, syncOnReconnect]);
+
+  useEffect(() => {
+    if (!syncOnMutation || snapshot.pendingProposalCount === 0) {
+      return;
+    }
+    if (mutationSyncRevision.current === snapshot.revision) {
+      return;
+    }
+    mutationSyncRevision.current = snapshot.revision;
+    void client.sync().catch((error: unknown) => onSyncError?.(error));
+  }, [
+    client,
+    onSyncError,
+    snapshot.pendingProposalCount,
+    snapshot.revision,
+    syncOnMutation,
+  ]);
 
   return {
     ...snapshot,
@@ -145,13 +166,19 @@ export function useStableSyncClient<T>(
   return useMemo(createClient, dependencies);
 }
 
-export type SyncEnginePhase = "opening" | SyncClientPhase;
+export type SyncEnginePhase = "disabled" | "opening" | SyncClientPhase;
 
 export interface UseSyncEngineOptions<
   Schema extends ReplicaSchemaContract,
   Rejection extends JsonValue = JsonValue,
-> extends CreateIndexedDbSyncClientFromConfigOptions<Schema, Rejection> {
+> extends Omit<
+    CreateIndexedDbSyncClientFromConfigOptions<Schema, Rejection>,
+    "streamId"
+  > {
+  readonly streamId?: string;
+  readonly enabled?: boolean;
   readonly initialSync?: boolean;
+  readonly syncOnMutation?: boolean;
   readonly syncOnReconnect?: boolean;
   readonly serviceWorker?: boolean | UseSyncServiceWorkerOptions;
   readonly onClientError?: (error: unknown) => void;
@@ -195,6 +222,7 @@ export function useSyncEngine<
     clientId,
     config,
     credentials,
+    enabled = true,
     fetch,
     headers,
     indexedDB,
@@ -209,6 +237,7 @@ export function useSyncEngine<
     rejectionCodec,
     serviceWorker = true,
     streamId,
+    syncOnMutation = false,
     syncOnReconnect = true,
     transport,
   } = options;
@@ -219,6 +248,7 @@ export function useSyncEngine<
       clientId,
       config,
       credentials,
+      enabled,
       fetch,
       headers,
       indexedDB,
@@ -235,6 +265,7 @@ export function useSyncEngine<
       clientId,
       config,
       credentials,
+      enabled,
       fetch,
       headers,
       indexedDB,
@@ -248,6 +279,8 @@ export function useSyncEngine<
       transport,
     ],
   );
+  const canOpen =
+    enabled && streamId !== undefined && streamId.length > 0;
   const [clientState, setClientState] =
     useState<SyncEngineClientState<Schema, Rejection> | undefined>(undefined);
   const [clientErrorState, setClientErrorState] =
@@ -259,7 +292,7 @@ export function useSyncEngine<
   const pendingClient = useMemo(
     () => createPendingSyncClient<Schema, Rejection>(
       config.schema,
-      streamId,
+      streamId === undefined || streamId.length === 0 ? "pending" : streamId,
       clientId,
     ),
     [clientId, config.schema, streamId],
@@ -272,9 +305,15 @@ export function useSyncEngine<
     setClientState(undefined);
     setClientErrorState(undefined);
 
+    if (!enabled || streamId === undefined || streamId.length === 0) {
+      return;
+    }
+
+    const openedStreamId = streamId;
+
     void createIndexedDbSyncClientFromConfig({
       config,
-      streamId,
+      streamId: openedStreamId,
       ...(clientId === undefined ? {} : { clientId }),
       ...(credentials === undefined ? {} : { credentials }),
       ...(fetch === undefined ? {} : { fetch }),
@@ -312,6 +351,7 @@ export function useSyncEngine<
 
   const subscribed = useSyncClient(activeClient, {
     initialSync: client !== undefined && initialSync,
+    syncOnMutation: client !== undefined && syncOnMutation,
     syncOnReconnect: client !== undefined && syncOnReconnect,
     ...(onSyncError === undefined ? {} : { onSyncError }),
   });
@@ -327,7 +367,11 @@ export function useSyncEngine<
 
   const ready = client !== undefined;
   const phase: SyncEnginePhase =
-    clientError !== undefined ? "error" : ready ? subscribed.phase : "opening";
+    !canOpen
+      ? "disabled"
+      : clientError !== undefined
+        ? "error"
+        : ready ? subscribed.phase : "opening";
   const error = clientError ?? subscribed.error;
 
   return {
@@ -340,7 +384,11 @@ export function useSyncEngine<
     sync: () => {
       if (client === undefined) {
         return Promise.reject(
-          new SyncClientError("sync engine client is not ready"),
+          new SyncClientError(
+            canOpen
+              ? "sync engine client is not ready"
+              : "sync engine client is disabled",
+          ),
         );
       }
       return client.sync();
@@ -527,6 +575,7 @@ function createPendingSyncClient<
     table: db.table,
     enqueueOperation: () => reject() as Promise<never>,
     sync: reject,
+    requestSync: reject,
     readResolutions: async () => [],
     deleteCommittedLogPrefix: async () => 0,
     acknowledgeResolutions: async () => 0,

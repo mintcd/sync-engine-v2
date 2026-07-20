@@ -299,6 +299,23 @@ import {
 `useSyncEngine` owns the browser client lifecycle for one stream. None of these
 helpers create a server, route, or database binding.
 
+`useSyncEngine` can also delay opening a browser client until application
+session state is ready:
+
+```tsx
+const sync = useSyncEngine({
+  config: finalConfig,
+  enabled: sessionReady,
+  streamId: session.streamId,
+  syncOnMutation: true,
+});
+```
+
+The client `sync()` method is queue-aware: a sync request made while another
+sync is in flight schedules one more pass before the promise settles. Retryable
+D1 commit conflicts are retried with bounded exponential backoff, and route
+servers report them as HTTP 409 responses with `code: "sync-conflict"`.
+
 ## Next.js generator
 
 The Next generator discovers a selected D1 schema and writes browser-safe client

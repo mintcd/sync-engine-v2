@@ -14,6 +14,7 @@ import type {
 import {
   SyncClientClosedError,
   SyncClientError,
+  SyncClientHttpError,
 } from "./errors";
 import { createOperationId } from "./id";
 import { createReplicaView } from "./replica-view";
@@ -65,10 +66,12 @@ export interface SyncClient<
     operation: RowOperation,
   ): Promise<ProposedOperation<RowOperation>>;
   /**
-   * Drain work through a final coherent post-merge store snapshot. Operations
-   * durably enqueued after that snapshot are left for the next sync call.
+   * Queue synchronization and drain every request made before the latest
+   * post-merge store snapshot. Calls made while a sync is in flight schedule
+   * another pass before the returned promise settles.
    */
   sync(): Promise<void>;
+  requestSync(): Promise<void>;
   readResolutions(): Promise<
     readonly ProposalDecision<RowOperation, Rejection>[]
   >;
@@ -76,6 +79,17 @@ export interface SyncClient<
   deleteCommittedLogPrefix(throughSequence: number): Promise<number>;
   acknowledgeResolutions(operationIds: Iterable<string>): Promise<number>;
   close(): Promise<void>;
+}
+
+export type SyncRetryPolicy = false | SyncRetryOptions;
+
+export interface SyncRetryOptions {
+  readonly maximumAttempts?: number;
+  readonly baseDelayMs?: number;
+  readonly maximumDelayMs?: number;
+  readonly jitterMs?: number;
+  readonly shouldRetry?: (error: unknown, attempt: number) => boolean;
+  readonly wait?: (milliseconds: number) => Promise<void>;
 }
 
 export interface CreateSyncClientOptions<
@@ -90,6 +104,7 @@ export interface CreateSyncClientOptions<
   readonly maximumProposals?: number;
   readonly maximumSyncRounds?: number;
   readonly operationId?: () => string;
+  readonly syncRetry?: SyncRetryPolicy;
 }
 
 export async function createSyncClient<
@@ -110,6 +125,7 @@ export async function createSyncClient<
     store: options.store,
   });
   let syncPromise: Promise<void> | undefined;
+  let syncRequested = false;
   let closed = false;
 
   function assertOpen(): void {
@@ -167,6 +183,25 @@ export async function createSyncClient<
     }
   }
 
+  async function runRequestedSync(): Promise<void> {
+    while (syncRequested) {
+      syncRequested = false;
+      await syncWithRetry(performSync, options.syncRetry);
+    }
+  }
+
+  function requestSync(): Promise<void> {
+    assertOpen();
+    syncRequested = true;
+    if (syncPromise !== undefined) {
+      return syncPromise;
+    }
+    syncPromise = runRequestedSync().finally(() => {
+      syncPromise = undefined;
+    });
+    return syncPromise;
+  }
+
   return {
     schema: options.schema,
     streamId: options.streamId,
@@ -181,16 +216,8 @@ export async function createSyncClient<
     },
     table: database.table,
     enqueueOperation: enqueue,
-    sync() {
-      assertOpen();
-      if (syncPromise !== undefined) {
-        return syncPromise;
-      }
-      syncPromise = performSync().finally(() => {
-        syncPromise = undefined;
-      });
-      return syncPromise;
-    },
+    sync: requestSync,
+    requestSync,
     readResolutions() {
       assertOpen();
       return options.store.readResolutions();
@@ -221,6 +248,81 @@ export async function createSyncClient<
       view.close();
     },
   };
+}
+
+const DEFAULT_SYNC_RETRY_ATTEMPTS = 5;
+const DEFAULT_SYNC_RETRY_BASE_DELAY_MS = 120;
+const DEFAULT_SYNC_RETRY_MAX_DELAY_MS = 2_000;
+
+export async function syncWithRetry(
+  sync: () => Promise<void>,
+  policy: SyncRetryPolicy | undefined = {},
+): Promise<void> {
+  if (policy === false) {
+    await sync();
+    return;
+  }
+
+  const maximumAttempts =
+    policy.maximumAttempts ?? DEFAULT_SYNC_RETRY_ATTEMPTS;
+  if (!Number.isSafeInteger(maximumAttempts) || maximumAttempts <= 0) {
+    throw new SyncClientError("sync retry maximumAttempts must be a positive integer");
+  }
+
+  const shouldRetry = policy.shouldRetry ?? isRetryableSyncError;
+  for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
+    try {
+      await sync();
+      return;
+    } catch (error) {
+      if (
+        attempt === maximumAttempts - 1 ||
+        !shouldRetry(error, attempt)
+      ) {
+        throw error;
+      }
+      await (policy.wait ?? wait)(syncRetryDelayMs(attempt, policy));
+    }
+  }
+}
+
+export function isRetryableSyncError(error: unknown): boolean {
+  if (error instanceof SyncClientHttpError) {
+    const code = syncRouteErrorCode(error.body);
+    if (code === "sync-conflict") {
+      return true;
+    }
+  }
+
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("D1 sync stream changed while committing") ||
+    message.includes("retry the sync request");
+}
+
+function syncRouteErrorCode(body: unknown): string | undefined {
+  if (body === null || typeof body !== "object") {
+    return undefined;
+  }
+  const code = (body as { readonly code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+function syncRetryDelayMs(attempt: number, options: SyncRetryOptions): number {
+  const baseDelayMs = options.baseDelayMs ?? DEFAULT_SYNC_RETRY_BASE_DELAY_MS;
+  const maximumDelayMs =
+    options.maximumDelayMs ?? DEFAULT_SYNC_RETRY_MAX_DELAY_MS;
+  const jitterMs = options.jitterMs ?? baseDelayMs;
+  const exponentialDelay = Math.min(
+    maximumDelayMs,
+    baseDelayMs * 2 ** attempt,
+  );
+  return exponentialDelay + Math.floor(Math.random() * jitterMs);
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
 
 export interface CreateIndexedDbSyncClientOptions<

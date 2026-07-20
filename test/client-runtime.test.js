@@ -7,6 +7,7 @@ import {
   SYNC_PROTOCOL_VERSION,
 } from "../dist/index.js";
 import {
+  SyncClientHttpError,
   SyncClientSchemaMismatchError,
   createIndexedDbSyncClientFromConfig,
   createIndexedDbSyncClient,
@@ -99,6 +100,119 @@ test("schema-aware IndexedDB client syncs row operations through protocol v1", a
     assert.deepEqual(authority.materializedState.tables.notes, {
       "[\"n1\"]": { id: "n1", title: "First", score: 1 },
     });
+  } finally {
+    await client.close();
+    await deleteIndexedDbReplicaDatabase(databaseName, factory);
+  }
+});
+
+test("client sync drains a request queued during an in-flight sync", async () => {
+  const factory = new IDBFactory();
+  const databaseName = "client-runtime-queued-sync";
+  const authority = createAuthority();
+  let calls = 0;
+  let markFirstRequestStarted;
+  let releaseFirstResponse;
+  const firstRequestStarted = new Promise((resolve) => {
+    markFirstRequestStarted = resolve;
+  });
+  const firstResponseReleased = new Promise((resolve) => {
+    releaseFirstResponse = resolve;
+  });
+  const transport = {
+    async synchronize(envelope) {
+      calls += 1;
+      if (calls === 1) {
+        markFirstRequestStarted();
+        await firstResponseReleased;
+      }
+      return createTransport(authority).synchronize(envelope);
+    },
+  };
+  const client = await createIndexedDbSyncClient({
+    schema,
+    streamId: "account/user-1",
+    clientId: "client-a",
+    databaseName,
+    indexedDB: factory,
+    transport,
+  });
+
+  try {
+    await client.table("notes").put({
+      id: "n1",
+      title: "First",
+      score: null,
+    });
+    const syncing = client.sync();
+    await firstRequestStarted;
+    await client.table("notes").put({
+      id: "n2",
+      title: "Second",
+      score: null,
+    });
+    const queued = client.sync();
+
+    releaseFirstResponse();
+    await queued;
+    await syncing;
+
+    assert.equal(calls, 3);
+    assert.equal(client.getSnapshot().confirmedSequence, 2);
+    assert.equal(client.getSnapshot().pendingProposalCount, 0);
+    assert.deepEqual(client.table("notes").all(), [
+      { id: "n1", title: "First", score: null },
+      { id: "n2", title: "Second", score: null },
+    ]);
+  } finally {
+    await client.close();
+    await deleteIndexedDbReplicaDatabase(databaseName, factory);
+  }
+});
+
+test("client sync retries retryable sync endpoint errors", async () => {
+  const factory = new IDBFactory();
+  const databaseName = "client-runtime-sync-retry";
+  const authority = createAuthority();
+  let calls = 0;
+  const transport = {
+    async synchronize(envelope) {
+      calls += 1;
+      if (calls === 1) {
+        throw new SyncClientHttpError(
+          409,
+          "D1 sync stream changed while committing; retry the sync request",
+          { code: "sync-conflict" },
+        );
+      }
+      return createTransport(authority).synchronize(envelope);
+    },
+  };
+  const client = await createIndexedDbSyncClient({
+    schema,
+    streamId: "account/user-1",
+    clientId: "client-a",
+    databaseName,
+    indexedDB: factory,
+    transport,
+    syncRetry: {
+      maximumAttempts: 2,
+      baseDelayMs: 0,
+      jitterMs: 0,
+    },
+  });
+
+  try {
+    await client.table("notes").put({
+      id: "n1",
+      title: "Retry",
+      score: null,
+    });
+    await client.sync();
+
+    assert.equal(calls, 2);
+    assert.equal(client.getSnapshot().confirmedSequence, 1);
+    assert.equal(client.getSnapshot().pendingProposalCount, 0);
   } finally {
     await client.close();
     await deleteIndexedDbReplicaDatabase(databaseName, factory);

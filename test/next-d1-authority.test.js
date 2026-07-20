@@ -10,6 +10,9 @@ import {
 import {
   D1SyncStorageError,
   createD1RowSyncAuthority,
+  findD1RowSyncStateRow,
+  getD1RowSyncStateRows,
+  readD1RowSyncState,
 } from "../dist/next/index.js";
 import { defineReplicaSchema } from "../dist/schema/index.js";
 
@@ -64,6 +67,42 @@ test("D1 row authority persists accepted decisions and canonical pages", async (
   assert.equal(pull.throughSequence, 1);
   assert.equal(pull.entries[0].operationId, "op-1");
   assert.deepEqual(pull.entries[0].operation, operation);
+});
+
+test("D1 row state helpers read materialized stream rows", async () => {
+  const database = new FixtureD1Database();
+  const authority = createAuthority(database, "workspace:state");
+  const operation = putNote("note-1", "Readable");
+
+  await authority.synchronize({
+    baseSequence: 0,
+    maximumEntries: 10,
+    proposals: [await proposal("op-1", 1, operation)],
+  });
+
+  const state = await readD1RowSyncState({
+    database,
+    streamId: "workspace:state",
+    schema,
+    tablePrefix: "test_sync",
+  });
+
+  assert.deepEqual(getD1RowSyncStateRows(schema, state, "notes"), [
+    { id: "note-1", title: "Readable" },
+  ]);
+  assert.deepEqual(
+    findD1RowSyncStateRow(schema, state, "notes", "id", "note-1"),
+    { id: "note-1", title: "Readable" },
+  );
+  assert.equal(
+    await readD1RowSyncState({
+      database,
+      streamId: "workspace:missing",
+      schema,
+      tablePrefix: "test_sync",
+    }),
+    null,
+  );
 });
 
 test("D1 row authority can project accepted operations into application tables", async () => {

@@ -14,6 +14,7 @@ import {
 } from "../dist/client/index.js";
 import { deleteIndexedDbReplicaDatabase } from "../dist/indexeddb/index.js";
 import {
+  D1SyncConflictError,
   createRowSyncRouteServer,
 } from "../dist/next/index.js";
 import { defineReplicaSchema } from "../dist/schema/index.js";
@@ -210,6 +211,35 @@ test("push route reports client sequence conflicts as HTTP 409", async () => {
     code: "client-sequence-conflict",
     message:
       'client "browser-a" sequence 1 is already bound to "op-1", not "op-2"',
+  });
+});
+
+test("push route reports retryable sync conflicts as HTTP 409", async () => {
+  const syncServer = createRowSyncRouteServer({
+    schema,
+    authority: {
+      synchronize() {
+        throw new D1SyncConflictError();
+      },
+    },
+  });
+
+  const conflict = await syncServer.push(
+    jsonRequest({
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      streamId: "workspace:w1",
+      request: {
+        baseSequence: 0,
+        maximumEntries: 10,
+        proposals: [],
+      },
+    }),
+  );
+
+  assert.equal(conflict.status, 409);
+  assert.deepEqual(await readJson(conflict), {
+    code: "sync-conflict",
+    message: "D1 sync stream changed while committing; retry the sync request",
   });
 });
 

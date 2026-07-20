@@ -35,12 +35,15 @@ import {
   createInitialDatabaseState,
   createRowLogInterpreter,
   createRowOperationCodec,
+  readTableRows,
 } from "../client";
 import type {
   CreateRowLogInterpreterOptions,
   ReplicaDatabaseState,
+  RowFor,
   RowOperation,
   RowRejection,
+  TableName,
 } from "../client";
 import type { SyncRouteAuthority } from "./server";
 
@@ -116,6 +119,81 @@ export interface CreateD1RowSyncAuthorityOptions<
   readonly rejectInvalidOperation?:
     CreateRowLogInterpreterOptions<Rejection>["rejectInvalidOperation"];
   readonly projectRowsToApplicationTables?: boolean;
+}
+
+export interface ReadD1RowSyncStateOptions<
+  Schema extends ReplicaSchemaContract,
+> {
+  readonly database: D1DatabaseLike;
+  readonly streamId: string;
+  readonly schema: Schema;
+  readonly tablePrefix?: string;
+}
+
+export async function readD1RowSyncState<
+  const Schema extends ReplicaSchemaContract,
+>(
+  options: ReadD1RowSyncStateOptions<Schema>,
+): Promise<ReplicaDatabaseState | null> {
+  const tables = d1SyncTableNames(options.tablePrefix ?? "sync_engine_v2");
+  const row = await firstD1Row<StreamRow>(
+    statement(
+      options.database,
+      `SELECT schema_hash, head_sequence, materialized_state_json
+       FROM ${tables.streams}
+       WHERE stream_id = ?`,
+      [options.streamId],
+    ),
+  );
+  if (row === null) {
+    return null;
+  }
+
+  const receivedSchemaHash = readString(row.schema_hash, "stream.schema_hash");
+  if (receivedSchemaHash !== options.schema.schemaHash) {
+    throw new D1SyncStorageError(
+      `D1 sync stream ${JSON.stringify(options.streamId)} uses schema ` +
+        `${JSON.stringify(receivedSchemaHash)}, not ${JSON.stringify(options.schema.schemaHash)}`,
+    );
+  }
+
+  return deserializeJson(
+    readString(row.materialized_state_json, "stream.materialized_state_json"),
+    createReplicaDatabaseStateCodec(options.schema),
+  );
+}
+
+export function getD1RowSyncStateRows<
+  const Schema extends ReplicaSchemaContract,
+  Table extends TableName<Schema>,
+>(
+  schema: Schema,
+  state: Readonly<ReplicaDatabaseState> | null,
+  tableName: Table,
+): readonly RowFor<Schema, Table>[] {
+  if (state === null) {
+    return [];
+  }
+  assertDatabaseStateSchema(schema, state);
+  return readTableRows(
+    state,
+    tableName,
+  ) as readonly RowFor<Schema, Table>[];
+}
+
+export function findD1RowSyncStateRow<
+  const Schema extends ReplicaSchemaContract,
+  Table extends TableName<Schema>,
+>(
+  schema: Schema,
+  state: Readonly<ReplicaDatabaseState> | null,
+  tableName: Table,
+  column: Extract<keyof RowFor<Schema, Table>, string>,
+  value: unknown,
+): RowFor<Schema, Table> | undefined {
+  return getD1RowSyncStateRows(schema, state, tableName).find((row) =>
+    String(row[column]) === String(value),
+  );
 }
 
 interface D1Tables {

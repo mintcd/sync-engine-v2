@@ -264,6 +264,9 @@ function statusForError(error: unknown): number {
   ) {
     return 409;
   }
+  if (isRetryableSyncConflict(error)) {
+    return 409;
+  }
   if (error instanceof SyncEngineError) {
     return 400;
   }
@@ -286,10 +289,21 @@ function codeForError(error: unknown, status: number): string {
   if (error instanceof ClientSequenceConflictError) {
     return "client-sequence-conflict";
   }
+  if (isRetryableSyncConflict(error)) {
+    return "sync-conflict";
+  }
   if (error instanceof SyncEngineError) {
     return "sync-protocol-error";
   }
   return status >= 500 ? "internal-error" : "bad-request";
+}
+
+function isRetryableSyncConflict(error: unknown): boolean {
+  return error instanceof SyncEngineError &&
+    (
+      error.message.includes("D1 sync stream changed while committing") ||
+      error.message.includes("retry the sync request")
+    );
 }
 
 class SyncRouteRequestError extends Error {
